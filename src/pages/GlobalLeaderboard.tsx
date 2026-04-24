@@ -1,0 +1,107 @@
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { DataTable } from "@/components/DataTable";
+import { istMonthKey, pastMonthKeys, ratio, ratioBadgeClass } from "@/lib/format";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Crown, Trophy } from "lucide-react";
+import { Link } from "react-router-dom";
+
+type Row = {
+  player_tag: string;
+  player_name: string;
+  clan_tag: string;
+  donations: number;
+  donations_received: number;
+};
+
+export default function GlobalLeaderboard() {
+  const [month, setMonth] = useState<string>(istMonthKey());
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  const months = useMemo(() => pastMonthKeys(12), []);
+
+  useEffect(() => {
+    setLoading(true);
+    supabase
+      .from("monthly_aggregates")
+      .select("player_tag,player_name,clan_tag,donations,donations_received")
+      .eq("month_key", month)
+      .order("donations", { ascending: false })
+      .limit(500)
+      .then(({ data }) => {
+        setRows((data as Row[]) ?? []);
+        setLoading(false);
+      });
+  }, [month]);
+
+  const totalDonated = rows.reduce((s, r) => s + r.donations, 0);
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-hero-gradient -mx-4 px-4 py-10 sm:-mx-8 sm:px-8 rounded-lg border border-border">
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
+              <Trophy className="h-4 w-4 text-gold" /> Global Alliance Leaderboard
+            </div>
+            <h1 className="mt-2 text-4xl font-bold text-gold">Top Donators · {month}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Combined ranking across every tracked clan. Resets 00:00 IST on the 1st.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select value={month} onValueChange={setMonth}>
+              <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {months.map((m) => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stat label="Players" value={rows.length} />
+          <Stat label="Total Donated" value={totalDonated.toLocaleString()} />
+          <Stat label="Top Donator" value={rows[0]?.player_name ?? "—"} />
+          <Stat label="Top Amount" value={(rows[0]?.donations ?? 0).toLocaleString()} />
+        </div>
+      </section>
+
+      <DataTable
+        rows={rows}
+        defaultSort={{ key: "donations", dir: "desc" }}
+        searchKeys={["player_name", "player_tag", "clan_tag"]}
+        columns={[
+          { key: "rank", label: "#", className: "w-12", render: (_r, i) => <RankBadge idx={i} /> },
+          { key: "player_name", label: "Player", sortable: true, render: (r) => (
+            <Link to={`/player?tag=${encodeURIComponent(r.player_tag)}`} className="hover:text-gold">
+              <div className="font-medium">{r.player_name || "—"}</div>
+              <div className="text-xs text-muted-foreground">{r.player_tag}</div>
+            </Link>
+          )},
+          { key: "clan_tag", label: "Clan", sortable: true, render: (r) => (
+            <Link to={`/clan/${encodeURIComponent(r.clan_tag)}`} className="text-xs text-muted-foreground hover:text-gold">{r.clan_tag}</Link>
+          )},
+          { key: "donations", label: "Donated", sortable: true, className: "text-right", render: (r) => <span className="font-mono text-gold">{r.donations.toLocaleString()}</span> },
+          { key: "donations_received", label: "Received", sortable: true, className: "text-right", render: (r) => <span className="font-mono">{r.donations_received.toLocaleString()}</span> },
+          { key: "ratio", label: "Ratio", className: "text-right", accessor: (r) => r.donations_received > 0 ? r.donations / r.donations_received : 999, render: (r) => <span className={`font-mono ${ratioBadgeClass(r.donations, r.donations_received)}`}>{ratio(r.donations, r.donations_received)}</span> },
+        ]}
+      />
+      {loading && <div className="text-center text-sm text-muted-foreground">Loading…</div>}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-md border border-border bg-card px-4 py-3">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-foreground truncate">{value}</div>
+    </div>
+  );
+}
+
+function RankBadge({ idx }: { idx: number }) {
+  if (idx === 0) return <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gold-gradient text-primary-foreground font-bold"><Crown className="h-4 w-4" /></span>;
+  if (idx < 3) return <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-primary/40 text-gold font-bold">{idx + 1}</span>;
+  return <span className="text-muted-foreground">{idx + 1}</span>;
+}

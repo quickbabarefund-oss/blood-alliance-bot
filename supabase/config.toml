@@ -1,1 +1,10 @@
 project_id = "oumdgsdoehqbsyudkwzm"
+
+[functions.poll-clans]
+verify_jwt = false
+
+[functions.discord-interactions]
+verify_jwt = false
+
+[functions.discord-register-commands]
+verify_jwt = false
