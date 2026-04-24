@@ -1,6 +1,6 @@
 // One-shot helper: registers (or re-registers) all guild slash commands.
 // Call: POST /functions/v1/discord-register-commands  (no body needed)
-import { corsHeaders } from "@supabase/supabase-js/cors";
+import { corsHeaders } from "../_shared/cors.ts";
 
 const APP_ID = Deno.env.get("DISCORD_APPLICATION_ID")!;
 const GUILD_ID = Deno.env.get("DISCORD_GUILD_ID")!;

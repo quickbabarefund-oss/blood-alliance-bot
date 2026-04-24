@@ -1,6 +1,6 @@
 // Scheduled every 5 minutes. Polls every active clan, snapshots donations,
 // updates monthly aggregates with deltas, then refreshes Discord leaderboards.
-import { corsHeaders } from "@supabase/supabase-js/cors";
+import { corsHeaders } from "../_shared/cors.ts";
 import { fetchClan, normalizeTag } from "../_shared/coc.ts";
 import { adminClient, refreshAllDiscordMessages } from "../_shared/leaderboard.ts";
 import { istMonthKey } from "../_shared/month.ts";
