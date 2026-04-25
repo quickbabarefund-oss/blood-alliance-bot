@@ -22,15 +22,22 @@ async function verifyDiscord(req: Request, rawBody: string): Promise<boolean> {
   const ts = req.headers.get("x-signature-timestamp");
   if (!sig || !ts || !PUBLIC_KEY) return false;
   try {
+    const keyBytes = hexToBytes(PUBLIC_KEY);
     const key = await crypto.subtle.importKey(
       "raw",
-      hexToBytes(PUBLIC_KEY),
+      keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength) as ArrayBuffer,
       { name: "Ed25519" },
       false,
       ["verify"],
     );
+    const sigBytes = hexToBytes(sig);
     const msg = new TextEncoder().encode(ts + rawBody);
-    return await crypto.subtle.verify("Ed25519", key, hexToBytes(sig), msg);
+    return await crypto.subtle.verify(
+      "Ed25519",
+      key,
+      sigBytes.buffer.slice(sigBytes.byteOffset, sigBytes.byteOffset + sigBytes.byteLength) as ArrayBuffer,
+      msg.buffer.slice(msg.byteOffset, msg.byteOffset + msg.byteLength) as ArrayBuffer,
+    );
   } catch (e) {
     console.error("verify error", e);
     return false;

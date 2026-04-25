@@ -2,7 +2,9 @@
 // Set COC_PROXY_BASE_URL to e.g. "https://proxy.clashking.dev/v1" or your proxy's base.
 // Token is sent as Bearer COC_PROXY_API_TOKEN.
 
-const BASE = (Deno.env.get("COC_PROXY_BASE_URL") ?? "https://api.clashofclans.com/v1").replace(/\/+$/, "");
+const RAW_BASE = (Deno.env.get("COC_PROXY_BASE_URL") ?? "https://api.clashk.ing").replace(/\/+$/, "");
+// Tolerate users including or omitting /v1 suffix
+const BASE = RAW_BASE.endsWith("/v1") ? RAW_BASE.slice(0, -3) : RAW_BASE;
 const TOKEN = Deno.env.get("COC_PROXY_API_TOKEN") ?? "";
 
 export function encodeTag(tag: string) {
@@ -35,16 +37,14 @@ export interface CoCClan {
 }
 
 export async function fetchClan(tag: string): Promise<CoCClan> {
-  const url = `${BASE}/clans/${encodeTag(tag)}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      Accept: "application/json",
-    },
-  });
+  const url = `${BASE}/v1/clans/${encodeTag(tag)}`;
+  console.log("CoC GET", url);
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`CoC API ${res.status} for ${tag}: ${body.slice(0, 200)}`);
+    throw new Error(`CoC API ${res.status} for ${tag} at ${url}: ${body.slice(0, 200)}`);
   }
   return await res.json();
 }
