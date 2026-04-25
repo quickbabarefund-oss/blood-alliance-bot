@@ -213,6 +213,33 @@ Deno.serve(async (req) => {
   const interaction = JSON.parse(raw);
   if (interaction.type === PING) return new Response(JSON.stringify({ type: RESP_PONG }), { headers: { "Content-Type": "application/json" } });
 
+  if (interaction.type === MESSAGE_COMPONENT) {
+    try {
+      const cid: string = interaction.data?.custom_id ?? "";
+      // Formats: lb:clan:<TAG>:<page>  |  lb:global:<page>
+      if (cid.startsWith("lb:") && !cid.endsWith(":noop")) {
+        const parts = cid.split(":");
+        let payload;
+        if (parts[1] === "clan") {
+          const clanTag = parts[2];
+          const page = parseInt(parts[3] ?? "0", 10) || 0;
+          payload = await buildClanEmbed(clanTag, page);
+        } else if (parts[1] === "global") {
+          const page = parseInt(parts[2] ?? "0", 10) || 0;
+          payload = await buildGlobalEmbed(page);
+        }
+        if (payload) {
+          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
+        }
+      }
+      // Acknowledge no-op buttons silently
+      return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+    } catch (e) {
+      console.error("component handler error", e);
+      return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+    }
+  }
+
   if (interaction.type === APPLICATION_COMMAND) {
     const name = interaction.data.name;
     try {
