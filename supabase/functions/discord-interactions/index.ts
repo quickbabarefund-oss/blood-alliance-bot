@@ -2,7 +2,8 @@
 // Set this URL as your Discord Application's "Interactions Endpoint URL".
 // All mutating commands are gated by DISCORD_MANAGER_ROLE_IDS (comma-separated role IDs).
 import { corsHeaders } from "../_shared/cors.ts";
-import { adminClient, buildClanLeaderboard, buildGlobalLeaderboard, refreshAllDiscordMessages } from "../_shared/leaderboard.ts";
+import { adminClient } from "../_shared/leaderboard.ts";
+import { buildClanEmbed, buildGlobalEmbed } from "../_shared/embeds.ts";
 import { normalizeTag } from "../_shared/coc.ts";
 import { istMonthKey } from "../_shared/month.ts";
 
