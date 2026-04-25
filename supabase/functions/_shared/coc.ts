@@ -1,17 +1,10 @@
 // Shared helpers for Clash of Clans proxy API.
-// Set COC_PROXY_BASE_URL to e.g. "https://proxy.clashking.dev/v1" or your proxy's base.
-// Token is sent as Bearer COC_PROXY_API_TOKEN.
+// This proxy is a POST-style edge function:
+//   POST <BASE> with JSON body { action: "search_clan" | "search_player", tag: "#XXXX" }
+// Configure with COC_PROXY_BASE_URL (full URL to the function endpoint).
 
-const RAW_BASE = (Deno.env.get("COC_PROXY_BASE_URL") ?? "https://api.clashk.ing").replace(/\/+$/, "");
-// Tolerate users including or omitting /v1 suffix
-const BASE = RAW_BASE.endsWith("/v1") ? RAW_BASE.slice(0, -3) : RAW_BASE;
+const BASE = (Deno.env.get("COC_PROXY_BASE_URL") ?? "https://otbsecnrlgkpmomgwrtx.supabase.co/functions/v1/coc-api").replace(/\/+$/, "");
 const TOKEN = Deno.env.get("COC_PROXY_API_TOKEN") ?? "";
-
-export function encodeTag(tag: string) {
-  let t = tag.trim().toUpperCase();
-  if (!t.startsWith("#")) t = "#" + t;
-  return encodeURIComponent(t);
-}
 
 export function normalizeTag(tag: string) {
   let t = (tag ?? "").trim().toUpperCase().replace(/O/g, "0");
@@ -36,15 +29,37 @@ export interface CoCClan {
   memberList?: CoCMember[];
 }
 
-export async function fetchClan(tag: string): Promise<CoCClan> {
-  const url = `${BASE}/v1/clans/${encodeTag(tag)}`;
-  console.log("CoC GET", url);
-  const headers: Record<string, string> = { Accept: "application/json" };
+async function postAction<T>(action: string, tag: string): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
-  const res = await fetch(url, { headers });
+  console.log("CoC POST", BASE, action, tag);
+  const res = await fetch(BASE, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, tag: normalizeTag(tag) }),
+  });
+  const text = await res.text();
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`CoC API ${res.status} for ${tag} at ${url}: ${body.slice(0, 200)}`);
+    throw new Error(`CoC API ${res.status} for ${action} ${tag}: ${text.slice(0, 300)}`);
   }
-  return await res.json();
+  let json: any;
+  try { json = JSON.parse(text); } catch {
+    throw new Error(`CoC API non-JSON response for ${action} ${tag}: ${text.slice(0, 200)}`);
+  }
+  if (json && json.success === false) {
+    throw new Error(`CoC API error for ${action} ${tag}: ${json.error ?? "unknown"}`);
+  }
+  // Some proxies wrap the payload in { success: true, data: {...} }; unwrap if present.
+  return (json?.data ?? json) as T;
+}
+
+export async function fetchClan(tag: string): Promise<CoCClan> {
+  return await postAction<CoCClan>("search_clan", tag);
+}
+
+export async function fetchPlayer(tag: string): Promise<any> {
+  return await postAction<any>("search_player", tag);
 }
