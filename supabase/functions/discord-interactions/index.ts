@@ -2,7 +2,8 @@
 // Set this URL as your Discord Application's "Interactions Endpoint URL".
 // All mutating commands are gated by DISCORD_MANAGER_ROLE_IDS (comma-separated role IDs).
 import { corsHeaders } from "../_shared/cors.ts";
-import { adminClient, buildClanLeaderboard, buildGlobalLeaderboard, refreshAllDiscordMessages } from "../_shared/leaderboard.ts";
+import { adminClient } from "../_shared/leaderboard.ts";
+import { buildClanEmbed, buildGlobalEmbed } from "../_shared/embeds.ts";
 import { normalizeTag } from "../_shared/coc.ts";
 import { istMonthKey } from "../_shared/month.ts";
 
@@ -47,9 +48,11 @@ async function verifyDiscord(req: Request, rawBody: string): Promise<boolean> {
 // --- Discord interaction types ---
 const PING = 1;
 const APPLICATION_COMMAND = 2;
+const MESSAGE_COMPONENT = 3;
 const RESP_PONG = 1;
 const RESP_CHANNEL_MSG = 4;
 const RESP_DEFERRED = 5;
+const RESP_UPDATE_MESSAGE = 7;
 
 function reply(content: string, ephemeral = true) {
   return new Response(JSON.stringify({
@@ -209,6 +212,33 @@ Deno.serve(async (req) => {
 
   const interaction = JSON.parse(raw);
   if (interaction.type === PING) return new Response(JSON.stringify({ type: RESP_PONG }), { headers: { "Content-Type": "application/json" } });
+
+  if (interaction.type === MESSAGE_COMPONENT) {
+    try {
+      const cid: string = interaction.data?.custom_id ?? "";
+      // Formats: lb:clan:<TAG>:<page>  |  lb:global:<page>
+      if (cid.startsWith("lb:") && !cid.endsWith(":noop")) {
+        const parts = cid.split(":");
+        let payload;
+        if (parts[1] === "clan") {
+          const clanTag = parts[2];
+          const page = parseInt(parts[3] ?? "0", 10) || 0;
+          payload = await buildClanEmbed(clanTag, page);
+        } else if (parts[1] === "global") {
+          const page = parseInt(parts[2] ?? "0", 10) || 0;
+          payload = await buildGlobalEmbed(page);
+        }
+        if (payload) {
+          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
+        }
+      }
+      // Acknowledge no-op buttons silently
+      return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+    } catch (e) {
+      console.error("component handler error", e);
+      return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+    }
+  }
 
   if (interaction.type === APPLICATION_COMMAND) {
     const name = interaction.data.name;

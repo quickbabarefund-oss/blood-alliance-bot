@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { DataTable } from "@/components/DataTable";
-import { istMonthKey, pastMonthKeys, ratio, ratioBadgeClass } from "@/lib/format";
+import { istMonthKey, pastMonthKeys } from "@/lib/format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Crown, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -12,6 +12,7 @@ type Row = {
   clan_tag: string;
   donations: number;
   donations_received: number;
+  clan_name?: string;
 };
 
 export default function GlobalLeaderboard() {
@@ -22,16 +23,27 @@ export default function GlobalLeaderboard() {
 
   useEffect(() => {
     setLoading(true);
-    supabase
-      .from("monthly_aggregates")
-      .select("player_tag,player_name,clan_tag,donations,donations_received")
-      .eq("month_key", month)
-      .order("donations", { ascending: false })
-      .limit(500)
-      .then(({ data }) => {
-        setRows((data as Row[]) ?? []);
-        setLoading(false);
+    (async () => {
+      const [aggsRes, clansRes] = await Promise.all([
+        supabase
+          .from("monthly_aggregates")
+          .select("player_tag,player_name,clan_tag,donations,donations_received")
+          .eq("month_key", month)
+          .order("donations", { ascending: false })
+          .limit(1000),
+        supabase.from("clans").select("tag,name"),
+      ]);
+      const clanMap: Record<string, string> = {};
+      (clansRes.data as { tag: string; name: string }[] | null)?.forEach((c) => {
+        clanMap[c.tag] = c.name || c.tag;
       });
+      const merged = ((aggsRes.data as Row[]) ?? []).map((r) => ({
+        ...r,
+        clan_name: clanMap[r.clan_tag] || r.clan_tag,
+      }));
+      setRows(merged);
+      setLoading(false);
+    })();
   }, [month]);
 
   const totalDonated = rows.reduce((s, r) => s + r.donations, 0);
@@ -69,21 +81,23 @@ export default function GlobalLeaderboard() {
       <DataTable
         rows={rows}
         defaultSort={{ key: "donations", dir: "desc" }}
-        searchKeys={["player_name", "player_tag", "clan_tag"]}
+        searchKeys={["player_name", "player_tag", "clan_tag", "clan_name"]}
         columns={[
-          { key: "rank", label: "#", className: "w-12", render: (_r, i) => <RankBadge idx={i} /> },
-          { key: "player_name", label: "Player", sortable: true, render: (r) => (
-            <Link to={`/player?tag=${encodeURIComponent(r.player_tag)}`} className="hover:text-gold">
-              <div className="font-medium">{r.player_name || "—"}</div>
-              <div className="text-xs text-muted-foreground">{r.player_tag}</div>
+          { key: "standing", label: "Standing", className: "w-20", render: (_r, i) => <RankBadge idx={i} /> },
+          { key: "clan_name", label: "Clan Name", sortable: true, render: (r) => (
+            <Link to={`/clan/${encodeURIComponent(r.clan_tag)}`} className="hover:text-gold">
+              <div className="font-medium">{r.clan_name || r.clan_tag}</div>
+              <div className="text-xs text-muted-foreground font-mono">{r.clan_tag}</div>
             </Link>
           )},
-          { key: "clan_tag", label: "Clan", sortable: true, render: (r) => (
-            <Link to={`/clan/${encodeURIComponent(r.clan_tag)}`} className="text-xs text-muted-foreground hover:text-gold">{r.clan_tag}</Link>
+          { key: "player_name", label: "Player Name", sortable: true, render: (r) => (
+            <Link to={`/player?tag=${encodeURIComponent(r.player_tag)}`} className="hover:text-gold">
+              <div className="font-medium">{r.player_name || "—"}</div>
+              <div className="text-xs text-muted-foreground font-mono">{r.player_tag}</div>
+            </Link>
           )},
-          { key: "donations", label: "Donated", sortable: true, className: "text-right", render: (r) => <span className="font-mono text-gold">{r.donations.toLocaleString()}</span> },
-          { key: "donations_received", label: "Received", sortable: true, className: "text-right", render: (r) => <span className="font-mono">{r.donations_received.toLocaleString()}</span> },
-          { key: "ratio", label: "Ratio", className: "text-right", accessor: (r) => r.donations_received > 0 ? r.donations / r.donations_received : 999, render: (r) => <span className={`font-mono ${ratioBadgeClass(r.donations, r.donations_received)}`}>{ratio(r.donations, r.donations_received)}</span> },
+          { key: "donations", label: "Donation", sortable: true, className: "text-right",
+            render: (r) => <span className="font-mono text-gold text-base">{r.donations.toLocaleString()}</span> },
         ]}
       />
       {loading && <div className="text-center text-sm text-muted-foreground">Loading…</div>}
@@ -101,7 +115,15 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function RankBadge({ idx }: { idx: number }) {
-  if (idx === 0) return <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gold-gradient text-primary-foreground font-bold"><Crown className="h-4 w-4" /></span>;
-  if (idx < 3) return <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-primary/40 text-gold font-bold">{idx + 1}</span>;
-  return <span className="text-muted-foreground">{idx + 1}</span>;
+  if (idx === 0) return (
+    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gold-gradient text-primary-foreground font-bold ring-gold">
+      <Crown className="h-4 w-4" />
+    </span>
+  );
+  if (idx < 3) return (
+    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary/60 text-gold font-bold">
+      {idx + 1}
+    </span>
+  );
+  return <span className="inline-block w-8 text-center text-muted-foreground font-mono">{idx + 1}</span>;
 }

@@ -14,10 +14,17 @@ async function dfetch(path: string, init: RequestInit = {}) {
   return res;
 }
 
-export async function createMessage(channelId: string, content: string): Promise<string | null> {
+export type DiscordPayload = {
+  content?: string;
+  embeds?: any[];
+  components?: any[];
+};
+
+export async function createMessage(channelId: string, payload: DiscordPayload): Promise<string | null> {
+  const body = { allowed_mentions: { parse: [] }, ...payload };
   const res = await dfetch(`/channels/${channelId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     console.error("createMessage failed", res.status, await res.text());
@@ -27,10 +34,11 @@ export async function createMessage(channelId: string, content: string): Promise
   return j.id as string;
 }
 
-export async function editMessage(channelId: string, messageId: string, content: string): Promise<boolean> {
+export async function editMessage(channelId: string, messageId: string, payload: DiscordPayload): Promise<boolean> {
+  const body = { allowed_mentions: { parse: [] }, ...payload };
   const res = await dfetch(`/channels/${channelId}/messages/${messageId}`, {
     method: "PATCH",
-    body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     console.error("editMessage failed", res.status, await res.text());
@@ -42,18 +50,11 @@ export async function editMessage(channelId: string, messageId: string, content:
 export async function upsertLeaderboardMessage(
   channelId: string,
   existingMessageId: string | null,
-  content: string,
+  payload: DiscordPayload,
 ): Promise<string | null> {
   if (existingMessageId) {
-    const ok = await editMessage(channelId, existingMessageId, content);
+    const ok = await editMessage(channelId, existingMessageId, payload);
     if (ok) return existingMessageId;
-    // fall through to create new
   }
-  return await createMessage(channelId, content);
-}
-
-// Truncate to Discord's 2000-char limit
-export function clipDiscord(content: string, max = 1990): string {
-  if (content.length <= max) return content;
-  return content.slice(0, max - 3) + "...";
+  return await createMessage(channelId, payload);
 }
