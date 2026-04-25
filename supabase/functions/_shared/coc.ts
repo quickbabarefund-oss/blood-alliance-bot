@@ -38,12 +38,13 @@ export interface CoCClan {
 
 export async function fetchClan(tag: string): Promise<CoCClan> {
   const url = `${BASE}/v1/clans/${encodeTag(tag)}`;
+  console.log("CoC GET", url);
   const headers: Record<string, string> = { Accept: "application/json" };
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
   const res = await fetch(url, { headers });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`CoC API ${res.status} for ${tag}: ${body.slice(0, 200)}`);
+    throw new Error(`CoC API ${res.status} for ${tag} at ${url}: ${body.slice(0, 200)}`);
   }
   return await res.json();
 }
