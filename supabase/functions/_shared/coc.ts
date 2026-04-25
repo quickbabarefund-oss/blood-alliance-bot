@@ -35,13 +35,10 @@ export interface CoCClan {
 }
 
 export async function fetchClan(tag: string): Promise<CoCClan> {
-  const url = `${BASE}/clans/${encodeTag(tag)}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      Accept: "application/json",
-    },
-  });
+  const url = `${BASE}/v1/clans/${encodeTag(tag)}`;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`CoC API ${res.status} for ${tag}: ${body.slice(0, 200)}`);
