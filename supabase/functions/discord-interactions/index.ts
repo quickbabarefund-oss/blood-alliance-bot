@@ -48,9 +48,11 @@ async function verifyDiscord(req: Request, rawBody: string): Promise<boolean> {
 // --- Discord interaction types ---
 const PING = 1;
 const APPLICATION_COMMAND = 2;
+const MESSAGE_COMPONENT = 3;
 const RESP_PONG = 1;
 const RESP_CHANNEL_MSG = 4;
 const RESP_DEFERRED = 5;
+const RESP_UPDATE_MESSAGE = 7;
 
 function reply(content: string, ephemeral = true) {
   return new Response(JSON.stringify({
