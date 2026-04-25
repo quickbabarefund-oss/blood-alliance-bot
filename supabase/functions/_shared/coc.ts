@@ -2,7 +2,9 @@
 // Set COC_PROXY_BASE_URL to e.g. "https://proxy.clashking.dev/v1" or your proxy's base.
 // Token is sent as Bearer COC_PROXY_API_TOKEN.
 
-const BASE = (Deno.env.get("COC_PROXY_BASE_URL") ?? "https://api.clashofclans.com/v1").replace(/\/+$/, "");
+const RAW_BASE = (Deno.env.get("COC_PROXY_BASE_URL") ?? "https://api.clashk.ing").replace(/\/+$/, "");
+// Tolerate users including or omitting /v1 suffix
+const BASE = RAW_BASE.endsWith("/v1") ? RAW_BASE.slice(0, -3) : RAW_BASE;
 const TOKEN = Deno.env.get("COC_PROXY_API_TOKEN") ?? "";
 
 export function encodeTag(tag: string) {
