@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
   }
 
   // Prune old data
-  await sb.rpc("prune_old_snapshots").catch(() => {});
+  try { await sb.rpc("prune_old_snapshots"); } catch { /* ignore */ }
 
   // Refresh discord leaderboards
   try { await refreshAllDiscordMessages(); } catch (e) { console.error("discord refresh", e); }
