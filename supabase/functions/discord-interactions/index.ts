@@ -4,7 +4,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/leaderboard.ts";
 import { buildClanEmbed, buildGlobalEmbed } from "../_shared/embeds.ts";
-import { normalizeTag } from "../_shared/coc.ts";
+import { normalizeTag, postCoc } from "../_shared/coc.ts";
 import { istMonthKey } from "../_shared/month.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
