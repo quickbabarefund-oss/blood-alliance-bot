@@ -25,15 +25,16 @@ function padNum(n: number, w: number) {
 }
 
 function navButtons(prefix: string, page: number, totalPages: number) {
-  const last = Math.max(0, totalPages - 1);
+  // Each custom_id MUST be unique within the action row, even when buttons are disabled.
+  // We embed the current page in prev/next ids so they remain unique on page 0/last.
   return [{
     type: 1, // ACTION_ROW
     components: [
-      { type: 2, style: 2, label: "⏮", custom_id: `${prefix}:0`, disabled: page <= 0 },
-      { type: 2, style: 2, label: "◀", custom_id: `${prefix}:${Math.max(0, page - 1)}`, disabled: page <= 0 },
+      { type: 2, style: 2, label: "⏮", custom_id: `${prefix}:first`, disabled: page <= 0 },
+      { type: 2, style: 2, label: "◀", custom_id: `${prefix}:prev:${page}`, disabled: page <= 0 },
       { type: 2, style: 1, label: `Page ${page + 1}/${Math.max(1, totalPages)}`, custom_id: `${prefix}:noop`, disabled: true },
-      { type: 2, style: 2, label: "▶", custom_id: `${prefix}:${Math.min(last, page + 1)}`, disabled: page >= last },
-      { type: 2, style: 2, label: "⏭", custom_id: `${prefix}:${last}`, disabled: page >= last },
+      { type: 2, style: 2, label: "▶", custom_id: `${prefix}:next:${page}`, disabled: page >= totalPages - 1 },
+      { type: 2, style: 2, label: "⏭", custom_id: `${prefix}:last`, disabled: page >= totalPages - 1 },
     ],
   }];
 }
