@@ -216,6 +216,118 @@ async function handleRefresh(interaction: any) {
   return deferred(true);
 }
 
+// --- /link, /unlink, /profile (CoC link API proxy) ---
+
+function callerUserId(interaction: any): string {
+  return interaction.member?.user?.id ?? interaction.user?.id ?? "";
+}
+
+function fmtTag(t: any): string {
+  if (!t) return "—";
+  return String(t).startsWith("#") ? String(t) : `#${t}`;
+}
+
+async function handleLink(interaction: any) {
+  const { sub, options } = getSubOptions(interaction.data.options);
+  const type = sub === "clan" ? "clan" : "player";
+  const tag = normalizeTag(getOpt(options, "tag"));
+  const targetUser = getOpt(options, "user") ?? callerUserId(interaction);
+  try {
+    const res = await postCoc({ action: "link", type, user_id: String(targetUser), tag });
+    return replyEmbed({
+      title: `🔗 ${type === "clan" ? "Clan" : "Player"} Linked`,
+      description: `Successfully linked **${type}** \`${tag}\` to <@${targetUser}>.`,
+      color: COLOR_GREEN,
+      fields: [
+        { name: "Type", value: type, inline: true },
+        { name: "Tag", value: `\`${tag}\``, inline: true },
+        { name: "User", value: `<@${targetUser}>`, inline: true },
+      ],
+      footer: { text: typeof res === "object" ? "API confirmed" : String(res).slice(0, 100) },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e) {
+    return replyEmbed({
+      title: "❌ Link Failed",
+      description: e instanceof Error ? e.message : String(e),
+      color: COLOR_RED,
+    });
+  }
+}
+
+async function handleUnlink(interaction: any) {
+  const { sub, options } = getSubOptions(interaction.data.options);
+  const type = sub === "clan" ? "clan" : "player";
+  const tag = normalizeTag(getOpt(options, "tag"));
+  const targetUser = getOpt(options, "user") ?? callerUserId(interaction);
+  try {
+    await postCoc({ action: "unlink", type, user_id: String(targetUser), tag });
+    return replyEmbed({
+      title: `🔓 ${type === "clan" ? "Clan" : "Player"} Unlinked`,
+      description: `Removed link for **${type}** \`${tag}\` from <@${targetUser}>.`,
+      color: COLOR_BLURPLE,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e) {
+    return replyEmbed({
+      title: "❌ Unlink Failed",
+      description: e instanceof Error ? e.message : String(e),
+      color: COLOR_RED,
+    });
+  }
+}
+
+function buildProfileEmbed(kind: "player" | "clan", payload: any, queriedBy: string) {
+  // The CoC link API typically returns either a single object or an array of links.
+  const items: any[] = Array.isArray(payload) ? payload : (payload?.items ?? payload?.links ?? [payload]);
+  const fields = items.slice(0, 10).map((it, i) => {
+    const tag = fmtTag(it?.tag ?? it?.player_tag ?? it?.clan_tag);
+    const uid = it?.user_id ?? it?.userId ?? it?.discord_id;
+    const name = it?.name ?? it?.player_name ?? it?.clan_name ?? "—";
+    return {
+      name: `#${i + 1} ${name}`,
+      value: `Tag: \`${tag}\`${uid ? `\nDiscord: <@${uid}>` : ""}`,
+      inline: false,
+    };
+  });
+  return {
+    title: kind === "clan" ? "🛡️ Clan Profile" : "👤 Player Profile",
+    description: `Lookup by **${queriedBy}** · ${items.length} result${items.length === 1 ? "" : "s"}`,
+    color: kind === "clan" ? 0xF1B93B : COLOR_BLURPLE,
+    fields: fields.length ? fields : [{ name: "No results", value: "Nothing linked.", inline: false }],
+    timestamp: new Date().toISOString(),
+  };
+}
+
+async function handleProfile(interaction: any) {
+  const { sub, options } = getSubOptions(interaction.data.options);
+  // sub: "user" | "tag" | "clan"
+  try {
+    if (sub === "user") {
+      const uid = getOpt(options, "user") ?? callerUserId(interaction);
+      const res = await postCoc({ action: "get", type: "player", filters: { user_id: String(uid) } });
+      return replyEmbed(buildProfileEmbed("player", res, `user <@${uid}>`));
+    }
+    if (sub === "tag") {
+      const tag = normalizeTag(getOpt(options, "tag"));
+      const res = await postCoc({ action: "get", type: "player", filters: { tag } });
+      return replyEmbed(buildProfileEmbed("player", res, `tag \`${tag}\``));
+    }
+    if (sub === "clan") {
+      const uid = getOpt(options, "user") ?? callerUserId(interaction);
+      const res = await postCoc({ action: "get", type: "clan", filters: { user_id: String(uid) } });
+      return replyEmbed(buildProfileEmbed("clan", res, `user <@${uid}>`));
+    }
+    return reply("Unknown subcommand.");
+  } catch (e) {
+    return replyEmbed({
+      title: "❌ Profile Lookup Failed",
+      description: e instanceof Error ? e.message : String(e),
+      color: COLOR_RED,
+    });
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("ok");
