@@ -38,6 +38,11 @@ function navButtons(prefix: string, page: number, totalPages: number) {
   }];
 }
 
+async function getBlacklistSet(sb: ReturnType<typeof adminClient>): Promise<Set<string>> {
+  const { data } = await sb.from("blacklist").select("player_tag");
+  return new Set(((data as { player_tag: string }[] | null) ?? []).map((b) => b.player_tag));
+}
+
 export async function buildClanEmbed(clanTag: string, page = 0, monthKey?: string) {
   const sb = adminClient();
   const mk = monthKey ?? istMonthKey();
@@ -45,22 +50,19 @@ export async function buildClanEmbed(clanTag: string, page = 0, monthKey?: strin
   const { data: clan } = await sb.from("clans").select("tag,name,badge_url").eq("tag", clanTag).maybeSingle();
   const c = (clan as ClanInfo | null) ?? { tag: clanTag, name: clanTag, badge_url: null };
 
-  const { count } = await sb
-    .from("monthly_aggregates")
-    .select("id", { count: "exact", head: true })
-    .eq("month_key", mk).eq("clan_tag", clanTag);
-  const total = count ?? 0;
+  const [aggRes, blocked] = await Promise.all([
+    sb.from("monthly_aggregates")
+      .select("player_tag,player_name,clan_tag,donations,donations_received")
+      .eq("month_key", mk).eq("clan_tag", clanTag)
+      .order("donations", { ascending: false }),
+    getBlacklistSet(sb),
+  ]);
+  const all = ((aggRes.data as Row[]) ?? []).filter((r) => !blocked.has(r.player_tag));
+  const total = all.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const rows = all.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
-  const { data } = await sb
-    .from("monthly_aggregates")
-    .select("player_tag,player_name,clan_tag,donations,donations_received")
-    .eq("month_key", mk).eq("clan_tag", clanTag)
-    .order("donations", { ascending: false })
-    .range(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE - 1);
-
-  const rows = (data as Row[]) ?? [];
   const startRank = safePage * PAGE_SIZE + 1;
   const lines = rows.length === 0
     ? "(no data yet — wait for next poll)"
@@ -92,22 +94,19 @@ export async function buildGlobalEmbed(page = 0, monthKey?: string) {
   const sb = adminClient();
   const mk = monthKey ?? istMonthKey();
 
-  const { count } = await sb
-    .from("monthly_aggregates")
-    .select("id", { count: "exact", head: true })
-    .eq("month_key", mk);
-  const total = count ?? 0;
+  const [aggRes, blocked] = await Promise.all([
+    sb.from("monthly_aggregates")
+      .select("player_tag,player_name,clan_tag,donations,donations_received")
+      .eq("month_key", mk)
+      .order("donations", { ascending: false })
+      .limit(2000),
+    getBlacklistSet(sb),
+  ]);
+  const all = ((aggRes.data as Row[]) ?? []).filter((r) => !blocked.has(r.player_tag));
+  const total = all.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(Math.max(0, page), totalPages - 1);
-
-  const { data } = await sb
-    .from("monthly_aggregates")
-    .select("player_tag,player_name,clan_tag,donations,donations_received")
-    .eq("month_key", mk)
-    .order("donations", { ascending: false })
-    .range(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE - 1);
-
-  const rows = (data as Row[]) ?? [];
+  const rows = all.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   // Resolve clan names
   const tags = Array.from(new Set(rows.map((r) => r.clan_tag)));
