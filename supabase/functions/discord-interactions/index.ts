@@ -133,11 +133,14 @@ async function handleTopOrLowest(interaction: any, asc: boolean) {
   const clanTagRaw = getOpt(opts, "clan");
   const count = Math.min(50, Math.max(1, getOpt(opts, "count") ?? 10));
   const mk = istMonthKey();
-  let q = sb.from("monthly_aggregates").select("player_tag,player_name,clan_tag,donations,donations_received").eq("month_key", mk).order("donations", { ascending: asc }).limit(count);
+  // Fetch a wider window so we can drop blacklisted entries and still return `count` rows.
+  let q = sb.from("monthly_aggregates").select("player_tag,player_name,clan_tag,donations,donations_received").eq("month_key", mk).order("donations", { ascending: asc }).limit(count + 200);
   if (clanTagRaw) q = q.eq("clan_tag", normalizeTag(clanTagRaw));
-  const { data } = await q;
-  if (!data?.length) return reply("No data for this month yet.");
-  const lines = data.map((r, i) => `\`${String(i + 1).padStart(2)}.\` **${r.player_name || r.player_tag}** \`${r.player_tag}\` — ${r.donations} donated / ${r.donations_received} received`);
+  const [{ data }, blRes] = await Promise.all([q, sb.from("blacklist").select("player_tag")]);
+  const blocked = new Set(((blRes.data as { player_tag: string }[] | null) ?? []).map((b) => b.player_tag));
+  const filtered = (data ?? []).filter((r) => !blocked.has(r.player_tag)).slice(0, count);
+  if (!filtered.length) return reply("No data for this month yet.");
+  const lines = filtered.map((r, i) => `\`${String(i + 1).padStart(2)}.\` **${r.player_name || r.player_tag}** \`${r.player_tag}\` — ${r.donations} donated / ${r.donations_received} received`);
   return reply(`**${asc ? "Lowest" : "Top"} ${count} (${mk} IST)**\n` + lines.join("\n"), false);
 }
 
