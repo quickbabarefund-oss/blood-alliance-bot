@@ -9,6 +9,7 @@ const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const CHANNEL = 7;
 const STRING = 3;
 const INTEGER = 4;
+const USER = 6;
 const SUB = 1;
 
 const commands = [
