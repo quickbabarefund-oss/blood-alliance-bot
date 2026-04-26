@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/DataTable";
-import { History, Search, User } from "lucide-react";
-import { timeAgo } from "@/lib/format";
+import { History, Search, Shield, Trophy, User } from "lucide-react";
+import { istMonthKey, timeAgo } from "@/lib/format";
 
 type Player = { tag: string; name: string; current_clan_tag: string | null; role: string | null; town_hall: number | null; last_seen_at: string };
 type Snap = { id: number; clan_tag: string; donations: number; donations_received: number; captured_at: string };
 type Agg = { month_key: string; clan_tag: string; donations: number; donations_received: number };
+type Clan = { tag: string; name: string; badge_url: string | null; member_count: number };
 
 function normTag(t: string) {
   let x = t.trim().toUpperCase();
@@ -25,19 +26,44 @@ export default function PlayerHistory() {
   const [player, setPlayer] = useState<Player | null>(null);
   const [snaps, setSnaps] = useState<Snap[]>([]);
   const [aggs, setAggs] = useState<Agg[]>([]);
+  const [clan, setClan] = useState<Clan | null>(null);
+  const [rank, setRank] = useState<{ pos: number; total: number; donations: number } | null>(null);
+  const [blacklisted, setBlacklisted] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!tag) return;
     setLoading(true);
+    setRank(null);
+    setClan(null);
+    setBlacklisted(false);
+    const monthNow = istMonthKey();
     Promise.all([
       supabase.from("players").select("*").eq("tag", tag).maybeSingle(),
       supabase.from("donation_snapshots").select("id,clan_tag,donations,donations_received,captured_at").eq("player_tag", tag).order("captured_at", { ascending: false }).limit(500),
       supabase.from("monthly_aggregates").select("month_key,clan_tag,donations,donations_received").eq("player_tag", tag).order("month_key", { ascending: false }),
-    ]).then(([p, s, a]) => {
-      setPlayer(p.data as Player | null);
+      supabase.from("monthly_aggregates").select("player_tag,donations").eq("month_key", monthNow).order("donations", { ascending: false }).limit(2000),
+      supabase.from("blacklist").select("player_tag").eq("player_tag", tag).maybeSingle(),
+    ]).then(async ([p, s, a, monthAll, bl]) => {
+      const playerData = p.data as Player | null;
+      setPlayer(playerData);
       setSnaps((s.data as Snap[]) ?? []);
       setAggs((a.data as Agg[]) ?? []);
+      setBlacklisted(!!bl.data);
+
+      // Compute current month rank (excluding blacklisted)
+      const blRes = await supabase.from("blacklist").select("player_tag");
+      const blocked = new Set(((blRes.data as { player_tag: string }[] | null) ?? []).map((b) => b.player_tag));
+      const ranked = ((monthAll.data as { player_tag: string; donations: number }[] | null) ?? [])
+        .filter((r) => !blocked.has(r.player_tag));
+      const idx = ranked.findIndex((r) => r.player_tag === tag);
+      if (idx >= 0) setRank({ pos: idx + 1, total: ranked.length, donations: ranked[idx].donations });
+
+      // Fetch clan info
+      if (playerData?.current_clan_tag) {
+        const { data: cl } = await supabase.from("clans").select("tag,name,badge_url,member_count").eq("tag", playerData.current_clan_tag).maybeSingle();
+        setClan(cl as Clan | null);
+      }
       setLoading(false);
     });
   }, [tag]);
