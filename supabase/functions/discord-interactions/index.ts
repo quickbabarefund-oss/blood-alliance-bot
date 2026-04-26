@@ -61,6 +61,17 @@ function reply(content: string, ephemeral = true) {
   }), { headers: { "Content-Type": "application/json" } });
 }
 
+const COLOR_GREEN = 0x57F287;
+const COLOR_RED = 0xED4245;
+const COLOR_BLURPLE = 0x5865F2;
+
+function replyEmbed(embed: any, ephemeral = true) {
+  return new Response(JSON.stringify({
+    type: RESP_CHANNEL_MSG,
+    data: { embeds: [embed], flags: ephemeral ? 64 : 0, allowed_mentions: { parse: [] } },
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
 function deferred(ephemeral = true) {
   return new Response(JSON.stringify({ type: RESP_DEFERRED, data: { flags: ephemeral ? 64 : 0 } }), { headers: { "Content-Type": "application/json" } });
 }
