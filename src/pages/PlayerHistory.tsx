@@ -101,18 +101,68 @@ export default function PlayerHistory() {
       {player && (
         <>
           <div className="rounded-lg border border-border bg-card p-5">
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-md bg-gold-gradient text-primary-foreground"><User /></div>
-              <div>
-                <div className="text-xl font-semibold">{player.name}</div>
-                <div className="text-xs text-muted-foreground font-mono">{player.tag}</div>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="grid h-12 w-12 place-items-center rounded-md bg-gold-gradient text-primary-foreground"><User /></div>
+                <div>
+                  <div className="text-xl font-semibold">{player.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono">{player.tag}</div>
+                </div>
               </div>
+              {blacklisted && (
+                <span className="rounded-md bg-destructive/20 text-destructive px-3 py-1 text-xs font-semibold uppercase tracking-wider">
+                  Blacklisted
+                </span>
+              )}
             </div>
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-              <Field label="Current clan" value={player.current_clan_tag ?? "—"} />
+              <Field label="Current clan" value={clan?.name ?? player.current_clan_tag ?? "—"} />
               <Field label="Role" value={player.role ?? "—"} />
               <Field label="Town Hall" value={player.town_hall ?? "—"} />
               <Field label="Last seen" value={timeAgo(player.last_seen_at)} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-border bg-card p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                <Trophy className="h-4 w-4 text-gold" /> Current global rank · {istMonthKey()}
+              </div>
+              {rank ? (
+                <>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-gold">#{rank.pos}</span>
+                    <span className="text-sm text-muted-foreground">of {rank.total}</span>
+                  </div>
+                  <div className="mt-1 text-sm">
+                    <span className="font-mono text-gold">{rank.donations.toLocaleString()}</span>
+                    <span className="text-muted-foreground"> donated this month</span>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-sm text-muted-foreground">{blacklisted ? "Excluded from rankings (blacklisted)" : "Not ranked yet this month"}</div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                <Shield className="h-4 w-4 text-gold" /> Clan info
+              </div>
+              {clan ? (
+                <div className="mt-2 flex items-center gap-3">
+                  {clan.badge_url ? (
+                    <img src={clan.badge_url} alt={clan.name} className="h-12 w-12 rounded" />
+                  ) : (
+                    <div className="grid h-12 w-12 place-items-center rounded bg-secondary"><Shield className="h-5 w-5" /></div>
+                  )}
+                  <div>
+                    <div className="font-semibold">{clan.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{clan.tag} · {clan.member_count} members</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-muted-foreground">Not in a tracked clan</div>
+              )}
             </div>
           </div>
 
