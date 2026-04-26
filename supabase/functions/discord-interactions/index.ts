@@ -384,6 +384,9 @@ Deno.serve(async (req) => {
         case "blacklist": return await handleListCmd(interaction, "blacklist");
         case "whitelist": return await handleListCmd(interaction, "whitelist");
         case "refresh": return await handleRefresh(interaction);
+        case "link": return await handleLink(interaction);
+        case "unlink": return await handleUnlink(interaction);
+        case "profile": return await handleProfile(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
