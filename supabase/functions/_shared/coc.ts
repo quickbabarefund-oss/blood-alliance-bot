@@ -63,3 +63,28 @@ export async function fetchClan(tag: string): Promise<CoCClan> {
 export async function fetchPlayer(tag: string): Promise<any> {
   return await postAction<any>("search_player", tag);
 }
+
+// Generic POST to the CoC proxy with a custom JSON body (for link/unlink/get/etc.).
+// Returns the unwrapped payload (data field if present) or throws on error.
+export async function postCoc<T = any>(body: Record<string, any>): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+  console.log("CoC POST (generic)", BASE, JSON.stringify(body));
+  const res = await fetch(BASE, { method: "POST", headers, body: JSON.stringify(body) });
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch {
+    throw new Error(`CoC API non-JSON response: ${text.slice(0, 200)}`);
+  }
+  if (!res.ok) {
+    const msg = json?.error ?? json?.message ?? text.slice(0, 300);
+    throw new Error(`CoC API ${res.status}: ${msg}`);
+  }
+  if (json && json.success === false) {
+    throw new Error(`CoC API error: ${json.error ?? "unknown"}`);
+  }
+  return (json?.data ?? json) as T;
+}

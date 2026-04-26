@@ -9,6 +9,7 @@ const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const CHANNEL = 7;
 const STRING = 3;
 const INTEGER = 4;
+const USER = 6;
 const SUB = 1;
 
 const commands = [
@@ -80,6 +81,46 @@ const commands = [
   {
     name: "refresh", description: "Force immediate poll & leaderboard refresh",
     options: [{ type: STRING, name: "clan", description: "Clan tag (optional, all if omitted)" }],
+  },
+  {
+    name: "link", description: "Link a player or clan tag to a Discord user",
+    options: [
+      { type: SUB, name: "player", description: "Link a player tag", options: [
+        { type: STRING, name: "tag", description: "Player tag (e.g. #2PP)", required: true },
+        { type: USER, name: "user", description: "Discord user (defaults to you)" },
+      ]},
+      { type: SUB, name: "clan", description: "Link a clan tag", options: [
+        { type: STRING, name: "tag", description: "Clan tag", required: true },
+        { type: USER, name: "user", description: "Discord user (defaults to you)" },
+      ]},
+    ],
+  },
+  {
+    name: "unlink", description: "Remove a link between a tag and a Discord user",
+    options: [
+      { type: SUB, name: "player", description: "Unlink a player tag", options: [
+        { type: STRING, name: "tag", description: "Player tag", required: true },
+        { type: USER, name: "user", description: "Discord user (defaults to you)" },
+      ]},
+      { type: SUB, name: "clan", description: "Unlink a clan tag", options: [
+        { type: STRING, name: "tag", description: "Clan tag", required: true },
+        { type: USER, name: "user", description: "Discord user (defaults to you)" },
+      ]},
+    ],
+  },
+  {
+    name: "profile", description: "Look up linked players/clans",
+    options: [
+      { type: SUB, name: "user", description: "Show linked players for a Discord user", options: [
+        { type: USER, name: "user", description: "Discord user (defaults to you)" },
+      ]},
+      { type: SUB, name: "tag", description: "Find the Discord user linked to a player tag", options: [
+        { type: STRING, name: "tag", description: "Player tag", required: true },
+      ]},
+      { type: SUB, name: "clan", description: "Show linked clans for a Discord user", options: [
+        { type: USER, name: "user", description: "Discord user (defaults to you)" },
+      ]},
+    ],
   },
 ];
 
