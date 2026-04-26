@@ -219,21 +219,27 @@ Deno.serve(async (req) => {
   if (interaction.type === MESSAGE_COMPONENT) {
     try {
       const cid: string = interaction.data?.custom_id ?? "";
-      // Formats: lb:clan:<TAG>:<page>  |  lb:global:<page>
+      // New formats:
+      //   lb:clan:<TAG>:first | lb:clan:<TAG>:prev:<n> | lb:clan:<TAG>:next:<n> | lb:clan:<TAG>:last
+      //   lb:global:first     | lb:global:prev:<n>     | lb:global:next:<n>     | lb:global:last
+      //   ...:noop
+      const VERY_LARGE = 1_000_000;
       if (cid.startsWith("lb:") && !cid.endsWith(":noop")) {
         const parts = cid.split(":");
-        let payload;
-        if (parts[1] === "clan") {
-          const clanTag = parts[2];
-          const page = parseInt(parts[3] ?? "0", 10) || 0;
-          payload = await buildClanEmbed(clanTag, page);
-        } else if (parts[1] === "global") {
-          const page = parseInt(parts[2] ?? "0", 10) || 0;
-          payload = await buildGlobalEmbed(page);
-        }
-        if (payload) {
-          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
-        }
+        const kind = parts[1]; // "clan" | "global"
+        const isClan = kind === "clan";
+        const clanTag = isClan ? parts[2] : "";
+        const action = isClan ? parts[3] : parts[2];
+        const arg = isClan ? parts[4] : parts[3];
+
+        let page = 0;
+        if (action === "first") page = 0;
+        else if (action === "last") page = VERY_LARGE; // builder clamps to last page
+        else if (action === "prev") page = Math.max(0, (parseInt(arg ?? "0", 10) || 0) - 1);
+        else if (action === "next") page = (parseInt(arg ?? "0", 10) || 0) + 1;
+
+        const payload = isClan ? await buildClanEmbed(clanTag, page) : await buildGlobalEmbed(page);
+        return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
       }
       // Acknowledge no-op buttons silently
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
