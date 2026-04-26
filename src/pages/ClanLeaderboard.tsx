@@ -24,12 +24,20 @@ export default function ClanLeaderboard() {
   }, [clanTag]);
 
   useEffect(() => {
-    supabase
-      .from("monthly_aggregates")
-      .select("player_tag,player_name,donations,donations_received")
-      .eq("month_key", month).eq("clan_tag", clanTag)
-      .order("donations", { ascending: false })
-      .then(({ data }) => setRows((data as AggRow[]) ?? []));
+    (async () => {
+      const [aggRes, blRes] = await Promise.all([
+        supabase
+          .from("monthly_aggregates")
+          .select("player_tag,player_name,donations,donations_received")
+          .eq("month_key", month).eq("clan_tag", clanTag)
+          .order("donations", { ascending: false }),
+        supabase.from("blacklist").select("player_tag"),
+      ]);
+      const blocked = new Set(
+        ((blRes.data as { player_tag: string }[] | null) ?? []).map((b) => b.player_tag)
+      );
+      setRows(((aggRes.data as AggRow[]) ?? []).filter((r) => !blocked.has(r.player_tag)));
+    })();
   }, [month, clanTag]);
 
   useEffect(() => {

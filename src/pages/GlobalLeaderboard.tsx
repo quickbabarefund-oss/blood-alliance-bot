@@ -24,7 +24,7 @@ export default function GlobalLeaderboard() {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      const [aggsRes, clansRes] = await Promise.all([
+      const [aggsRes, clansRes, blRes] = await Promise.all([
         supabase
           .from("monthly_aggregates")
           .select("player_tag,player_name,clan_tag,donations,donations_received")
@@ -32,15 +32,18 @@ export default function GlobalLeaderboard() {
           .order("donations", { ascending: false })
           .limit(1000),
         supabase.from("clans").select("tag,name"),
+        supabase.from("blacklist").select("player_tag"),
       ]);
       const clanMap: Record<string, string> = {};
       (clansRes.data as { tag: string; name: string }[] | null)?.forEach((c) => {
         clanMap[c.tag] = c.name || c.tag;
       });
-      const merged = ((aggsRes.data as Row[]) ?? []).map((r) => ({
-        ...r,
-        clan_name: clanMap[r.clan_tag] || r.clan_tag,
-      }));
+      const blocked = new Set(
+        ((blRes.data as { player_tag: string }[] | null) ?? []).map((b) => b.player_tag)
+      );
+      const merged = ((aggsRes.data as Row[]) ?? [])
+        .filter((r) => !blocked.has(r.player_tag))
+        .map((r) => ({ ...r, clan_name: clanMap[r.clan_tag] || r.clan_tag }));
       setRows(merged);
       setLoading(false);
     })();
