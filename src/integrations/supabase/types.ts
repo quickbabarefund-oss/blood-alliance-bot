@@ -40,6 +40,7 @@ export type Database = {
           active: boolean
           added_at: string
           badge_url: string | null
+          guild_id: string
           last_polled_at: string | null
           leaderboard_channel_id: string | null
           leaderboard_message_id: string | null
@@ -51,6 +52,7 @@ export type Database = {
           active?: boolean
           added_at?: string
           badge_url?: string | null
+          guild_id: string
           last_polled_at?: string | null
           leaderboard_channel_id?: string | null
           leaderboard_message_id?: string | null
@@ -62,6 +64,7 @@ export type Database = {
           active?: boolean
           added_at?: string
           badge_url?: string | null
+          guild_id?: string
           last_polled_at?: string | null
           leaderboard_channel_id?: string | null
           leaderboard_message_id?: string | null
@@ -71,22 +74,46 @@ export type Database = {
         }
         Relationships: []
       }
+      command_permissions: {
+        Row: {
+          added_at: string
+          command: string
+          guild_id: string
+          role_id: string
+        }
+        Insert: {
+          added_at?: string
+          command: string
+          guild_id: string
+          role_id: string
+        }
+        Update: {
+          added_at?: string
+          command?: string
+          guild_id?: string
+          role_id?: string
+        }
+        Relationships: []
+      }
       discord_config: {
         Row: {
           global_channel_id: string | null
           global_message_id: string | null
+          guild_id: string
           key: string
           updated_at: string
         }
         Insert: {
           global_channel_id?: string | null
           global_message_id?: string | null
+          guild_id: string
           key: string
           updated_at?: string
         }
         Update: {
           global_channel_id?: string | null
           global_message_id?: string | null
+          guild_id?: string
           key?: string
           updated_at?: string
         }
@@ -116,6 +143,27 @@ export type Database = {
           donations_received?: number
           id?: number
           player_tag?: string
+        }
+        Relationships: []
+      }
+      guilds: {
+        Row: {
+          commands_synced_at: string | null
+          guild_id: string
+          joined_at: string
+          name: string | null
+        }
+        Insert: {
+          commands_synced_at?: string | null
+          guild_id: string
+          joined_at?: string
+          name?: string | null
+        }
+        Update: {
+          commands_synced_at?: string | null
+          guild_id?: string
+          joined_at?: string
+          name?: string | null
         }
         Relationships: []
       }
@@ -180,15 +228,7 @@ export type Database = {
           tag?: string
           town_hall?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "players_current_clan_tag_fkey"
-            columns: ["current_clan_tag"]
-            isOneToOne: false
-            referencedRelation: "clans"
-            referencedColumns: ["tag"]
-          },
-        ]
+        Relationships: []
       }
       poll_runs: {
         Row: {
