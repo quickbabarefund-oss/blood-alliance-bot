@@ -67,7 +67,8 @@ export async function createMessageWithFile(
 ): Promise<string | null> {
   const form = new FormData();
   form.append("payload_json", JSON.stringify({ allowed_mentions: { parse: [] }, ...payload }));
-  form.append("files[0]", new Blob([data], { type: "application/octet-stream" }), filename);
+  const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  form.append("files[0]", new Blob([ab], { type: "application/octet-stream" }), filename);
   const res = await fetch(`${API}/channels/${channelId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bot ${BOT}` },
