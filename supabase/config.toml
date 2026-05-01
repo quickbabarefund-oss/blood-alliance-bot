@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.monthly-reset]
 verify_jwt = false
+
+[functions.war-poll]
+verify_jwt = false
+
+[functions.coc-link-sync]
+verify_jwt = false
