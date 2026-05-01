@@ -601,6 +601,11 @@ Deno.serve(async (req) => {
         case "unlink": return await handleUnlink(interaction);
         case "profile": return await handleProfile(interaction);
         case "perm": return await handlePerm(interaction);
+        case "war_track_setup": return await handleWarTrackSetup(interaction);
+        case "setup_war_log_channel": return await handleSetupWarLogChannel(interaction);
+        case "setup_war_reminder": return await handleSetupWarReminder(interaction);
+        case "war_announcement": return await handleWarAnnouncement(interaction);
+        case "th_emoji": return await handleThEmoji(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
