@@ -360,6 +360,179 @@ async function handleProfile(interaction: any) {
   }
 }
 
+// --- War tracking handlers ---
+async function handleWarTrackSetup(interaction: any) {
+  const denied = await gate(interaction, "war_track_setup"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const opts = interaction.data.options ?? [];
+  const clanTag = normalizeTag(getOpt(opts, "clan_tag"));
+  const sb = adminClient();
+  await sb.from("war_track_config").upsert({
+    guild_id: guildId, clan_tag: clanTag,
+    rep_channel_id: String(getOpt(opts, "rep_channel")),
+    rep_role_id: String(getOpt(opts, "rep_role")),
+    mail_channel_id: String(getOpt(opts, "mail_channel")),
+    mail_ping_role_id: String(getOpt(opts, "mail_ping_role")),
+    log_channel_id: getOpt(opts, "log_channel") ? String(getOpt(opts, "log_channel")) : null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "guild_id,clan_tag" });
+  return reply(`✅ War tracking configured for \`${clanTag}\`.\n• Rep channel: <#${getOpt(opts, "rep_channel")}>\n• Mail channel: <#${getOpt(opts, "mail_channel")}>\n${getOpt(opts, "log_channel") ? `• Log channel: <#${getOpt(opts, "log_channel")}>` : "⚠️ Set a log channel via `/setup_war_log_channel` for reminders & results."}`);
+}
+
+async function handleSetupWarLogChannel(interaction: any) {
+  const denied = await gate(interaction, "setup_war_log_channel"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const opts = interaction.data.options ?? [];
+  const clanTag = normalizeTag(getOpt(opts, "clan_tag"));
+  const channel = String(getOpt(opts, "channel"));
+  const sb = adminClient();
+  const { data: existing } = await sb.from("war_track_config").select("guild_id").eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+  if (!existing) return reply(`⚠️ Run \`/war_track_setup\` for \`${clanTag}\` first.`);
+  await sb.from("war_track_config").update({ log_channel_id: channel, updated_at: new Date().toISOString() })
+    .eq("guild_id", guildId).eq("clan_tag", clanTag);
+  return reply(`✅ Log channel for \`${clanTag}\` set to <#${channel}>.`);
+}
+
+async function handleSetupWarReminder(interaction: any) {
+  const denied = await gate(interaction, "setup_war_reminder"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { sub, options } = getSubOptions(interaction.data.options);
+  if (sub === "add") {
+    const clanTag = normalizeTag(getOpt(options, "clan_tag"));
+    const minutes = parseInt(getOpt(options, "minutes"), 10);
+    const anchor = String(getOpt(options, "anchor"));
+    if (!minutes || minutes <= 0) return reply("Minutes must be a positive integer.");
+    const { data } = await sb.from("war_reminders").insert({
+      guild_id: guildId, clan_tag: clanTag, minutes, anchor, active: true,
+    }).select("id").single();
+    return reply(`✅ Reminder #${data?.id}: **${minutes}m ${anchor === "before_end" ? "before war ends" : "after battle day starts"}** for \`${clanTag}\`.`);
+  }
+  if (sub === "remove") {
+    const id = parseInt(getOpt(options, "id"), 10);
+    await sb.from("war_reminders").delete().eq("guild_id", guildId).eq("id", id);
+    return reply(`🗑️ Removed reminder #${id}.`);
+  }
+  if (sub === "list") {
+    const clanTag = normalizeTag(getOpt(options, "clan_tag"));
+    const { data } = await sb.from("war_reminders").select("id,minutes,anchor,active").eq("guild_id", guildId).eq("clan_tag", clanTag).order("minutes");
+    if (!data?.length) return reply(`No reminders configured for \`${clanTag}\`.`);
+    const lines = data.map((r: any) => `• #${r.id} — ${r.minutes}m ${r.anchor === "before_end" ? "before end" : "after start"} ${r.active ? "" : "(off)"}`);
+    return reply(`**Reminders for \`${clanTag}\`**\n${lines.join("\n")}`);
+  }
+  return reply("Unknown subcommand.");
+}
+
+async function handleWarAnnouncement(interaction: any) {
+  const denied = await gate(interaction, "war_announcement"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const opts = interaction.data.options ?? [];
+  const clanTag = normalizeTag(getOpt(opts, "clan_tag"));
+  const outcome = String(getOpt(opts, "outcome"));
+  const template = String(getOpt(opts, "template"));
+  const sb = adminClient();
+  const field = outcome === "win" ? "win_announcement" : "lose_announcement";
+  const { data: existing } = await sb.from("war_track_config").select("guild_id").eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+  if (!existing) return reply(`⚠️ Run \`/war_track_setup\` for \`${clanTag}\` first.`);
+  await sb.from("war_track_config").update({ [field]: template, updated_at: new Date().toISOString() })
+    .eq("guild_id", guildId).eq("clan_tag", clanTag);
+  return reply(`✅ ${outcome.toUpperCase()} announcement template saved for \`${clanTag}\`.\nTokens: \`{opponent}\` \`{opp_tag}\` \`{our}\` \`{our_tag}\` \`{ping}\``);
+}
+
+async function handleThEmoji(interaction: any) {
+  const denied = await gate(interaction, "th_emoji"); if (denied) return denied;
+  const sb = adminClient();
+  const { sub, options } = getSubOptions(interaction.data.options);
+  if (sub === "set") {
+    const th = parseInt(getOpt(options, "th"), 10);
+    const emoji = String(getOpt(options, "emoji"));
+    await sb.from("th_emojis").upsert({ th_level: th, emoji, updated_at: new Date().toISOString() });
+    return reply(`✅ TH${th} emoji set to ${emoji}.`);
+  }
+  if (sub === "list") {
+    const { data } = await sb.from("th_emojis").select("th_level,emoji").order("th_level", { ascending: false });
+    if (!data?.length) return reply("No TH emojis configured. Use `/th_emoji set` to add them.");
+    return reply(data.map((r: any) => `TH${r.th_level} → ${r.emoji}`).join("\n"));
+  }
+  return reply("Unknown subcommand.");
+}
+
+// War decision select menu handler (custom_id: war:decide:<war_id>)
+async function handleWarDecide(interaction: any): Promise<Response> {
+  const sb = adminClient();
+  const cid: string = interaction.data?.custom_id ?? "";
+  const warId = parseInt(cid.split(":")[2], 10);
+  const choice = interaction.data?.values?.[0]; // "win" | "lose"
+  if (!warId || !["win", "lose"].includes(choice)) {
+    return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+  }
+
+  const { data: war } = await sb.from("wars").select("*").eq("id", warId).maybeSingle();
+  if (!war) return reply("⚠️ This war is no longer being tracked.");
+
+  const { data: cfg } = await sb.from("war_track_config")
+    .select("*").eq("guild_id", war.guild_id).eq("clan_tag", war.clan_tag).maybeSingle();
+
+  // Permission: must have rep_role_id
+  const memberRoles: string[] = interaction.member?.roles ?? [];
+  const repRole = cfg?.rep_role_id;
+  const allowed = (repRole && memberRoles.includes(repRole)) || (BigInt(interaction.member?.permissions ?? "0") & 0x8n) === 0x8n;
+  if (!allowed) return reply(`⛔ Only members with <@&${repRole ?? "rep_role"}> can decide this war.`);
+
+  const userId = callerUserId(interaction);
+  await sb.from("wars").update({
+    decision: choice, decided_by: userId, decided_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }).eq("id", warId);
+
+  // Edit the original rep message: disable select + add footer
+  if (war.rep_message_id) {
+    try {
+      const updated = JSON.parse(JSON.stringify(interaction.message ?? {}));
+      const embed = (updated.embeds ?? [{}])[0] ?? {};
+      embed.footer = { text: `Decided: ${choice.toUpperCase()} by ${interaction.member?.user?.username ?? "—"}` };
+      await fetch(`https://discord.com/api/v10/channels/${interaction.channel_id}/messages/${war.rep_message_id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bot ${Deno.env.get("DISCORD_BOT_TOKEN")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          embeds: [embed],
+          components: [{ type: 1, components: [{
+            type: 3, custom_id: `war:decided:${warId}`, placeholder: `Decided: ${choice.toUpperCase()}`,
+            disabled: true, options: [{ label: "Decided", value: "x" }],
+          }]}],
+        }),
+      });
+    } catch (e) { console.error("edit rep msg failed", e); }
+  }
+
+  // Mail-room announcement
+  if (cfg?.mail_channel_id) {
+    const tpl = (choice === "win" ? cfg.win_announcement : cfg.lose_announcement)
+      ?? (choice === "win"
+        ? "🏆 {ping} — We're going for the **WIN** vs **{opponent}** ({opp_tag})! Mirror first attack 3⭐, ≥2⭐ in first 16h, 3⭐ in last 8h."
+        : "🏳️ {ping} — We're **LOSING** vs **{opponent}** ({opp_tag}). Mirror first attack 2⭐, 1⭐ first 16h, 2⭐ last 8h. No extras.");
+    const ping = cfg.mail_ping_role_id ? `<@&${cfg.mail_ping_role_id}>` : "";
+    const content = tpl
+      .replaceAll("{opponent}", war.opponent_name ?? war.opponent_tag)
+      .replaceAll("{opp_tag}", war.opponent_tag)
+      .replaceAll("{our}", war.clan_name ?? war.clan_tag)
+      .replaceAll("{our_tag}", war.clan_tag)
+      .replaceAll("{ping}", ping);
+    await fetch(`https://discord.com/api/v10/channels/${cfg.mail_channel_id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${Deno.env.get("DISCORD_BOT_TOKEN")}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content,
+        allowed_mentions: { parse: ["roles"] },
+      }),
+    });
+  }
+
+  return new Response(JSON.stringify({
+    type: RESP_CHANNEL_MSG,
+    data: { content: `✅ Locked in: **${choice.toUpperCase()}**. Announcement posted.`, flags: 64 },
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
 // --- Server ---
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
