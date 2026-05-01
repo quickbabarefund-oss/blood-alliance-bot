@@ -142,4 +142,66 @@ export const COMMANDS: any[] = [
       { type: SUB, name: "list", description: "Show all per-command role overrides" },
     ],
   },
+  {
+    name: "war_track_setup", description: "Set up war tracking for a clan in this server",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag (e.g. #ABC123)", required: true },
+      { type: CHANNEL, name: "rep_channel", description: "Channel for reps approval embeds", required: true },
+      { type: ROLE, name: "rep_role", description: "Role allowed to pick Win/Lose", required: true },
+      { type: CHANNEL, name: "mail_channel", description: "Channel for mail-room announcements", required: true },
+      { type: ROLE, name: "mail_ping_role", description: "Role to ping in announcements", required: true },
+      { type: CHANNEL, name: "log_channel", description: "Channel for reminders/results (optional, can also use /setup_war_log_channel)" },
+    ],
+  },
+  {
+    name: "setup_war_log_channel", description: "Set the war log channel (reminders, war-started, results)",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+      { type: CHANNEL, name: "channel", description: "Log channel", required: true },
+    ],
+  },
+  {
+    name: "setup_war_reminder", description: "Manage war-day reminders",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: SUB, name: "add", description: "Add a reminder", options: [
+        { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+        { type: INTEGER, name: "minutes", description: "Minutes offset (e.g. 120 = 2 hours)", required: true },
+        { type: STRING, name: "anchor", description: "Anchor", required: true, choices: [
+          { name: "Before war ends", value: "before_end" },
+          { name: "After battle day starts", value: "after_start" },
+        ]},
+      ]},
+      { type: SUB, name: "remove", description: "Remove a reminder by id", options: [
+        { type: INTEGER, name: "id", description: "Reminder id (from list)", required: true },
+      ]},
+      { type: SUB, name: "list", description: "List reminders for a clan", options: [
+        { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+      ]},
+    ],
+  },
+  {
+    name: "war_announcement", description: "Customize win/lose mail-room announcements",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+      { type: STRING, name: "outcome", description: "Outcome", required: true, choices: [
+        { name: "Win", value: "win" }, { name: "Lose", value: "lose" },
+      ]},
+      { type: STRING, name: "template", description: "Template. Tokens: {opponent} {opp_tag} {our} {our_tag} {ping}", required: true },
+    ],
+  },
+  {
+    name: "th_emoji", description: "Manage Town Hall custom emojis used in war embeds",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: SUB, name: "set", description: "Set the emoji for a TH level", options: [
+        { type: INTEGER, name: "th", description: "TH level (e.g. 15)", required: true },
+        { type: STRING, name: "emoji", description: "Custom emoji (e.g. <:th15:1234567890>)", required: true },
+      ]},
+      { type: SUB, name: "list", description: "Show configured TH emojis" },
+    ],
+  },
 ];
