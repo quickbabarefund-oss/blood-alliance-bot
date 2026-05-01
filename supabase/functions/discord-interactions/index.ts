@@ -575,6 +575,9 @@ Deno.serve(async (req) => {
         const payload = isClan ? await buildClanEmbed(guildId, clanTag, page) : await buildGlobalEmbed(guildId, page);
         return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
       }
+      if (cid.startsWith("war:decide:")) {
+        return await handleWarDecide(interaction);
+      }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
       console.error("component handler error", e);
