@@ -74,6 +74,24 @@ export type Database = {
         }
         Relationships: []
       }
+      coc_links: {
+        Row: {
+          player_tag: string
+          refreshed_at: string
+          user_id: string
+        }
+        Insert: {
+          player_tag: string
+          refreshed_at?: string
+          user_id: string
+        }
+        Update: {
+          player_tag?: string
+          refreshed_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       command_permissions: {
         Row: {
           added_at: string
@@ -254,6 +272,280 @@ export type Database = {
           message?: string | null
           started_at?: string
           status?: string
+        }
+        Relationships: []
+      }
+      th_emojis: {
+        Row: {
+          emoji: string
+          th_level: number
+          updated_at: string
+        }
+        Insert: {
+          emoji: string
+          th_level: number
+          updated_at?: string
+        }
+        Update: {
+          emoji?: string
+          th_level?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      war_attacks: {
+        Row: {
+          attack_order: number
+          attacker_map_pos: number | null
+          attacker_name: string | null
+          attacker_tag: string
+          attacker_th: number | null
+          defender_map_pos: number | null
+          defender_tag: string | null
+          destruction: number | null
+          recorded_at: string
+          stars: number | null
+          war_id: number
+        }
+        Insert: {
+          attack_order: number
+          attacker_map_pos?: number | null
+          attacker_name?: string | null
+          attacker_tag: string
+          attacker_th?: number | null
+          defender_map_pos?: number | null
+          defender_tag?: string | null
+          destruction?: number | null
+          recorded_at?: string
+          stars?: number | null
+          war_id: number
+        }
+        Update: {
+          attack_order?: number
+          attacker_map_pos?: number | null
+          attacker_name?: string | null
+          attacker_tag?: string
+          attacker_th?: number | null
+          defender_map_pos?: number | null
+          defender_tag?: string | null
+          destruction?: number | null
+          recorded_at?: string
+          stars?: number | null
+          war_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "war_attacks_war_id_fkey"
+            columns: ["war_id"]
+            isOneToOne: false
+            referencedRelation: "wars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      war_reminders: {
+        Row: {
+          active: boolean
+          anchor: string
+          clan_tag: string
+          created_at: string
+          guild_id: string
+          id: number
+          minutes: number
+        }
+        Insert: {
+          active?: boolean
+          anchor: string
+          clan_tag: string
+          created_at?: string
+          guild_id: string
+          id?: number
+          minutes: number
+        }
+        Update: {
+          active?: boolean
+          anchor?: string
+          clan_tag?: string
+          created_at?: string
+          guild_id?: string
+          id?: number
+          minutes?: number
+        }
+        Relationships: []
+      }
+      war_rule_breaks: {
+        Row: {
+          detail: string | null
+          detected_at: string
+          id: number
+          player_name: string | null
+          player_tag: string
+          rule: string
+          war_id: number
+        }
+        Insert: {
+          detail?: string | null
+          detected_at?: string
+          id?: number
+          player_name?: string | null
+          player_tag: string
+          rule: string
+          war_id: number
+        }
+        Update: {
+          detail?: string | null
+          detected_at?: string
+          id?: number
+          player_name?: string | null
+          player_tag?: string
+          rule?: string
+          war_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "war_rule_breaks_war_id_fkey"
+            columns: ["war_id"]
+            isOneToOne: false
+            referencedRelation: "wars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      war_track_config: {
+        Row: {
+          clan_tag: string
+          created_at: string
+          guild_id: string
+          log_channel_id: string | null
+          lose_announcement: string | null
+          mail_channel_id: string | null
+          mail_ping_role_id: string | null
+          rep_channel_id: string | null
+          rep_role_id: string | null
+          updated_at: string
+          win_announcement: string | null
+        }
+        Insert: {
+          clan_tag: string
+          created_at?: string
+          guild_id: string
+          log_channel_id?: string | null
+          lose_announcement?: string | null
+          mail_channel_id?: string | null
+          mail_ping_role_id?: string | null
+          rep_channel_id?: string | null
+          rep_role_id?: string | null
+          updated_at?: string
+          win_announcement?: string | null
+        }
+        Update: {
+          clan_tag?: string
+          created_at?: string
+          guild_id?: string
+          log_channel_id?: string | null
+          lose_announcement?: string | null
+          mail_channel_id?: string | null
+          mail_ping_role_id?: string | null
+          rep_channel_id?: string | null
+          rep_role_id?: string | null
+          updated_at?: string
+          win_announcement?: string | null
+        }
+        Relationships: []
+      }
+      wars: {
+        Row: {
+          clan_badge_url: string | null
+          clan_name: string | null
+          clan_tag: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision: string | null
+          end_time: string | null
+          fired_reminders: number[]
+          guild_id: string
+          id: number
+          match_type: string | null
+          opp_destruction: number | null
+          opp_stars: number | null
+          opponent_badge_url: string | null
+          opponent_name: string | null
+          opponent_tag: string
+          our_destruction: number | null
+          our_stars: number | null
+          raw_roster: Json | null
+          rep_message_id: string | null
+          result: string | null
+          result_message_id: string | null
+          result_posted: boolean
+          start_time: string | null
+          state: string
+          team_size: number | null
+          updated_at: string
+          war_started_msg_sent: boolean
+        }
+        Insert: {
+          clan_badge_url?: string | null
+          clan_name?: string | null
+          clan_tag: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          end_time?: string | null
+          fired_reminders?: number[]
+          guild_id: string
+          id?: number
+          match_type?: string | null
+          opp_destruction?: number | null
+          opp_stars?: number | null
+          opponent_badge_url?: string | null
+          opponent_name?: string | null
+          opponent_tag: string
+          our_destruction?: number | null
+          our_stars?: number | null
+          raw_roster?: Json | null
+          rep_message_id?: string | null
+          result?: string | null
+          result_message_id?: string | null
+          result_posted?: boolean
+          start_time?: string | null
+          state: string
+          team_size?: number | null
+          updated_at?: string
+          war_started_msg_sent?: boolean
+        }
+        Update: {
+          clan_badge_url?: string | null
+          clan_name?: string | null
+          clan_tag?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          end_time?: string | null
+          fired_reminders?: number[]
+          guild_id?: string
+          id?: number
+          match_type?: string | null
+          opp_destruction?: number | null
+          opp_stars?: number | null
+          opponent_badge_url?: string | null
+          opponent_name?: string | null
+          opponent_tag?: string
+          our_destruction?: number | null
+          our_stars?: number | null
+          raw_roster?: Json | null
+          rep_message_id?: string | null
+          result?: string | null
+          result_message_id?: string | null
+          result_posted?: boolean
+          start_time?: string | null
+          state?: string
+          team_size?: number | null
+          updated_at?: string
+          war_started_msg_sent?: boolean
         }
         Relationships: []
       }
