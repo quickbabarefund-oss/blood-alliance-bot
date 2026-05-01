@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.discord-register-commands]
 verify_jwt = false
+
+[functions.discord-register-global-commands]
+verify_jwt = false
+
+[functions.monthly-reset]
+verify_jwt = false
