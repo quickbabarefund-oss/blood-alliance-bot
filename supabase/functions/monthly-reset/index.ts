@@ -26,6 +26,17 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dry_run") === "1";
+  const force = url.searchParams.get("force") === "1";
+
+  // Only run on the 1st of the IST month (unless ?force=1 or ?dry_run=1)
+  const istNow = new Date(Date.now() + (5 * 60 + 30) * 60_000);
+  const istDay = istNow.getUTCDate();
+  if (istDay !== 1 && !force && !dryRun) {
+    return new Response(JSON.stringify({ ok: true, skipped: true, reason: `IST day=${istDay}, not 1` }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const sb = adminClient();
   const { key: monthKey, label: monthLabel } = previousIstMonthKey();
   const blocked = await getBlocked(sb);
