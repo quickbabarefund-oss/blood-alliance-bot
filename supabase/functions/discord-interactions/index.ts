@@ -521,6 +521,8 @@ function handleHelp(_interaction: any): Response {
         "`/setup_war_reminder list|remove` — Manage reminders *(admin)*",
         "`/war_announcement <clan> <win|lose> <template>` — Customize mail-room text *(admin)*",
         "`/th_emoji set|list` — Map custom Town Hall emojis *(admin)*",
+        "`/war_track_list` — List war-tracked clans in this server *(admin)*",
+        "`/war_track_remove <clan>` — Stop war tracking for a clan *(admin)*",
       ],
     },
     {
