@@ -86,18 +86,19 @@ function callerUserId(interaction: any): string {
 }
 function fmtTag(t: any): string { if (!t) return "—"; return String(t).startsWith("#") ? String(t) : `#${t}`; }
 
-// Lazy on-join guild registration
+// Track guild + ensure no per-guild command duplicates exist (we use globals only).
 async function ensureGuildSynced(guildId: string, guildName?: string) {
   if (!guildId) return;
   const sb = adminClient();
   const { data: existing } = await sb.from("guilds").select("guild_id,commands_synced_at").eq("guild_id", guildId).maybeSingle();
   if (existing?.commands_synced_at) return;
-  console.log("Syncing commands for new guild", guildId);
-  const ok = await syncGuildCommands(guildId, COMMANDS);
+  console.log("Clearing per-guild commands for", guildId, "(using globals)");
+  // Wipe any per-guild commands so only globals are shown (prevents duplicates).
+  await syncGuildCommands(guildId, []);
   await sb.from("guilds").upsert({
     guild_id: guildId,
     name: guildName ?? null,
-    commands_synced_at: ok ? new Date().toISOString() : null,
+    commands_synced_at: new Date().toISOString(),
   }, { onConflict: "guild_id" });
 }
 
