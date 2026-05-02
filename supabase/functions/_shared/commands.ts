@@ -204,4 +204,7 @@ export const COMMANDS: any[] = [
       { type: SUB, name: "list", description: "Show configured TH emojis" },
     ],
   },
+  {
+    name: "help", description: "Show all available bot commands and what they do",
+  },
 ];
