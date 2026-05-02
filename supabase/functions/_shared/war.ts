@@ -150,13 +150,14 @@ export async function buildRepsPayload(opts: {
   return { embeds: [embed], components: [select] };
 }
 
-// Build a war-started or reminder embed showing players who still owe attacks.
+// Build a war-started or reminder message as plain content (so mentions actually ping users).
+// Returns { content, allowed_mentions } — no embed, since embed mentions don't trigger notifications.
 export async function buildReminderPayload(opts: {
   reminderLabel: string; // "War Started" or "2h reminder"
   emoji: string;
   war: any; // wars row
   current: CurrentWar;
-}): Promise<{ embeds: any[]; content?: string }> {
+}): Promise<{ content: string; allowed_mentions: any }> {
   const thMap = await loadThEmojis();
   const sb = adminClient();
   const ours = opts.current.clan!;
@@ -173,24 +174,30 @@ export async function buildReminderPayload(opts: {
     }
   }
 
+  const mentionedUsers: string[] = [];
   const lines = members
     .map((m) => {
       const used = m.attacks?.length ?? 0;
       const left = 2 - used; // standard war = 2 attacks each
       if (left <= 0) return null;
-      const mention = links[m.tag] ? `<@${links[m.tag]}>` : "";
+      let mention = "";
+      if (links[m.tag]) {
+        mention = `<@${links[m.tag]}>`;
+        mentionedUsers.push(links[m.tag]);
+      }
       return `⚔️ ${left}/2 | ${thEmoji(thMap, m.townhallLevel)} **${m.name}** | \`${m.tag}\` ${mention}`.trim();
     })
     .filter(Boolean)
     .join("\n");
 
-  const embed = {
-    title: `${opts.emoji} ${opts.reminderLabel}`,
-    description: `[${ours.name} (\`${ours.tag}\`)](${clanProfileLink(ours.tag)}) **VS** [${opp.name} (\`${opp.tag}\`)](${clanProfileLink(opp.tag)})\n\n${lines || "✅ All attacks used!"}`,
-    color: 0x4A8DFF,
-    timestamp: new Date().toISOString(),
-  };
-  return { embeds: [embed] };
+  const header = `${opts.emoji} **${opts.reminderLabel}** — ${ours.name} \`${ours.tag}\` **VS** ${opp.name} \`${opp.tag}\``;
+  const body = lines || "✅ All attacks used!";
+  // Discord caps content at 2000 chars
+  const content = `${header}\n${body}`.slice(0, 1990);
+
+  // Dedupe user IDs and cap to 100 (Discord limit)
+  const uniqueUsers = Array.from(new Set(mentionedUsers)).slice(0, 100);
+  return { content, allowed_mentions: { users: uniqueUsers } };
 }
 
 // --- Rule evaluation ---
