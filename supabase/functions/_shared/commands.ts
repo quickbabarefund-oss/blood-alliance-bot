@@ -194,6 +194,17 @@ export const COMMANDS: any[] = [
     ],
   },
   {
+    name: "war_track_list", description: "List war-tracked clans configured in this server",
+    default_member_permissions: ADMIN_ONLY,
+  },
+  {
+    name: "war_track_remove", description: "Stop war tracking for a clan in this server",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag to remove", required: true },
+    ],
+  },
+  {
     name: "th_emoji", description: "Manage Town Hall custom emojis used in war embeds",
     default_member_permissions: ADMIN_ONLY,
     options: [
