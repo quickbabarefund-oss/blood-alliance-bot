@@ -710,6 +710,8 @@ Deno.serve(async (req) => {
         case "setup_war_reminder": return await handleSetupWarReminder(interaction);
         case "war_announcement": return await handleWarAnnouncement(interaction);
         case "th_emoji": return await handleThEmoji(interaction);
+        case "war_track_list": return await handleWarTrackList(interaction);
+        case "war_track_remove": return await handleWarTrackRemove(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
