@@ -458,6 +458,76 @@ async function handleThEmoji(interaction: any) {
   return reply("Unknown subcommand.");
 }
 
+// --- /help ---
+function handleHelp(_interaction: any): Response {
+  const sections: { title: string; lines: string[] }[] = [
+    {
+      title: "📊 Leaderboards & Stats",
+      lines: [
+        "`/top [clan] [count]` — Top donators this month",
+        "`/lowest [clan] [count]` — Lowest donators this month",
+        "`/player <tag>` — Player history & monthly totals",
+        "`/refresh [clan]` — Force immediate poll & leaderboard refresh *(admin)*",
+      ],
+    },
+    {
+      title: "🛡️ Clan Setup",
+      lines: [
+        "`/clan add <tag> <channel>` — Track a clan & bind leaderboard channel *(admin)*",
+        "`/clan remove <tag>` — Stop tracking a clan *(admin)*",
+        "`/clan list` — List tracked clans in this server",
+        "`/global setchannel <channel>` — Bind global alliance leaderboard *(admin)*",
+      ],
+    },
+    {
+      title: "⚔️ War Tracking (FWA)",
+      lines: [
+        "`/war_track_setup` — Configure clan, rep channel/role, mail channel/ping *(admin)*",
+        "`/setup_war_log_channel <clan> <channel>` — Reminders, war-started & results *(admin)*",
+        "`/setup_war_reminder add <clan> <minutes> <anchor>` — Schedule a reminder *(admin)*",
+        "`/setup_war_reminder list|remove` — Manage reminders *(admin)*",
+        "`/war_announcement <clan> <win|lose> <template>` — Customize mail-room text *(admin)*",
+        "`/th_emoji set|list` — Map custom Town Hall emojis *(admin)*",
+      ],
+    },
+    {
+      title: "🔗 Linking & Profiles",
+      lines: [
+        "`/link player <tag> [user]` — Link a player tag to a Discord user",
+        "`/link clan <tag> [user]` — Link a clan tag to a Discord user",
+        "`/unlink player|clan <tag> [user]` — Remove a link",
+        "`/profile user [user]` — Show linked players for a user",
+        "`/profile tag <tag>` — Find the Discord user linked to a tag",
+        "`/profile clan [user]` — Show linked clans for a user",
+      ],
+    },
+    {
+      title: "🚫 Lists",
+      lines: [
+        "`/blacklist add|remove|list` — Manage blacklist *(add/remove: admin)*",
+        "`/whitelist add|remove|list` — Manage whitelist *(add/remove: admin)*",
+      ],
+    },
+    {
+      title: "🔐 Permissions",
+      lines: [
+        "`/perm grant <command> <role>` — Allow a role to use a command *(admin)*",
+        "`/perm revoke <command> <role>` — Revoke a role *(admin)*",
+        "`/perm list` — Show per-command role overrides",
+      ],
+    },
+  ];
+
+  const embed = {
+    title: "🤖 Bot Commands",
+    description: "Here's everything I can do. Commands marked *(admin)* require server-admin or a granted role.",
+    color: COLOR_BLURPLE,
+    fields: sections.map((s) => ({ name: s.title, value: s.lines.join("\n"), inline: false })),
+    footer: { text: "Tip: type / in chat to see all commands with autocomplete." },
+  };
+  return replyEmbed(embed, true);
+}
+
 // War decision select menu handler (custom_id: war:decide:<war_id>)
 async function handleWarDecide(interaction: any): Promise<Response> {
   const sb = adminClient();
