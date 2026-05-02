@@ -440,6 +440,39 @@ async function handleWarAnnouncement(interaction: any) {
   return reply(`✅ ${outcome.toUpperCase()} announcement template saved for \`${clanTag}\`.\nTokens: \`{opponent}\` \`{opp_tag}\` \`{our}\` \`{our_tag}\` \`{ping}\``);
 }
 
+async function handleWarTrackList(interaction: any) {
+  const denied = await gate(interaction, "war_track_list"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { data } = await sb.from("war_track_config")
+    .select("clan_tag,rep_channel_id,mail_channel_id,log_channel_id,rep_role_id,mail_ping_role_id")
+    .eq("guild_id", guildId).order("clan_tag");
+  if (!data?.length) return reply("No war-tracked clans in this server. Use `/war_track_setup` to add one.");
+  const lines = data.map((c: any) => {
+    const parts = [
+      `• **\`${c.clan_tag}\`**`,
+      `Rep: <#${c.rep_channel_id}> (<@&${c.rep_role_id}>)`,
+      `Mail: <#${c.mail_channel_id}> (<@&${c.mail_ping_role_id}>)`,
+      c.log_channel_id ? `Log: <#${c.log_channel_id}>` : "Log: ⚠️ not set",
+    ];
+    return parts.join(" · ");
+  });
+  return reply(`**War-tracked clans (${data.length})**\n${lines.join("\n")}`);
+}
+
+async function handleWarTrackRemove(interaction: any) {
+  const denied = await gate(interaction, "war_track_remove"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const clanTag = normalizeTag(getOpt(interaction.data.options, "clan_tag"));
+  const sb = adminClient();
+  const { data: existing } = await sb.from("war_track_config")
+    .select("clan_tag").eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+  if (!existing) return reply(`⚠️ \`${clanTag}\` is not war-tracked in this server.`);
+  await sb.from("war_track_config").delete().eq("guild_id", guildId).eq("clan_tag", clanTag);
+  await sb.from("war_reminders").delete().eq("guild_id", guildId).eq("clan_tag", clanTag);
+  return reply(`🗑️ Removed war tracking for \`${clanTag}\`. Reminders cleared. Historical war data is kept.`);
+}
+
 async function handleThEmoji(interaction: any) {
   const denied = await gate(interaction, "th_emoji"); if (denied) return denied;
   const sb = adminClient();
