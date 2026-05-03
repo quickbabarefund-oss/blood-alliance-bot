@@ -15,7 +15,6 @@ const ADMIN_ONLY = "0";
 export const COMMANDS: any[] = [
   {
     name: "clan", description: "Manage tracked clans",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "add", description: "Register a clan and bind its leaderboard channel", options: [
         { type: STRING, name: "tag", description: "Clan tag (e.g. #ABC123)", required: true },
@@ -29,7 +28,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "global", description: "Global alliance leaderboard config",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "setchannel", description: "Bind global leaderboard channel", options: [
         { type: CHANNEL, name: "channel", description: "Channel", required: true },
@@ -56,7 +54,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "blacklist", description: "Manage blacklist",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "add", description: "Add tag", options: [
         { type: STRING, name: "tag", description: "Player tag", required: true },
@@ -70,7 +67,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "whitelist", description: "Manage whitelist",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "add", description: "Add tag", options: [
         { type: STRING, name: "tag", description: "Player tag", required: true },
@@ -84,7 +80,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "refresh", description: "Force immediate poll & leaderboard refresh",
-    default_member_permissions: ADMIN_ONLY,
     options: [{ type: STRING, name: "clan", description: "Clan tag (optional, all if omitted)" }],
   },
   {
@@ -144,7 +139,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "war_track_setup", description: "Set up war tracking for a clan in this server",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: STRING, name: "clan_tag", description: "Clan tag (e.g. #ABC123)", required: true },
       { type: CHANNEL, name: "rep_channel", description: "Channel for reps approval embeds", required: true },
@@ -156,7 +150,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "setup_war_log_channel", description: "Set the war log channel (reminders, war-started, results)",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
       { type: CHANNEL, name: "channel", description: "Log channel", required: true },
@@ -164,7 +157,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "setup_war_reminder", description: "Manage war-day reminders",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "add", description: "Add a reminder", options: [
         { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
@@ -184,7 +176,6 @@ export const COMMANDS: any[] = [
   },
   {
     name: "war_announcement", description: "Customize win/lose mail-room announcements",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
       { type: STRING, name: "outcome", description: "Outcome", required: true, choices: [
@@ -195,18 +186,15 @@ export const COMMANDS: any[] = [
   },
   {
     name: "war_track_list", description: "List war-tracked clans configured in this server",
-    default_member_permissions: ADMIN_ONLY,
   },
   {
     name: "war_track_remove", description: "Stop war tracking for a clan in this server",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: STRING, name: "clan_tag", description: "Clan tag to remove", required: true },
     ],
   },
   {
     name: "th_emoji", description: "Manage Town Hall custom emojis used in war embeds",
-    default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "set", description: "Set the emoji for a TH level", options: [
         { type: INTEGER, name: "th", description: "TH level (e.g. 15)", required: true },
