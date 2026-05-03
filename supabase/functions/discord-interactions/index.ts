@@ -531,17 +531,23 @@ async function handleWarResendResult(interaction: any) {
     })));
   }
 
-  const updatedWar = { ...war, result, our_stars: ourStars, opp_stars: oppStars, our_destruction: ourDes, opp_destruction: oppDes };
-  const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
-  const startIso = (war.start_time ?? new Date().toISOString()).slice(0, 10);
-  const filename = `war-${war.clan_tag.replace("#","")}-vs-${war.opponent_tag.replace("#","")}-${startIso}-RESENT.txt`;
-  await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
-  await sb.from("wars").update({
-    result, our_stars: ourStars, opp_stars: oppStars,
-    our_destruction: ourDes, opp_destruction: oppDes,
-    result_posted: true, updated_at: new Date().toISOString(),
-  }).eq("id", war.id);
-  return reply(`✅ Resent result for \`${clanTag}\` to <#${cfg.log_channel_id}> (${breaks.length} violations).`);
+      const updatedWar = { ...war, result, our_stars: ourStars, opp_stars: oppStars, our_destruction: ourDes, opp_destruction: oppDes };
+      const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
+      const startIso = (war.start_time ?? new Date().toISOString()).slice(0, 10);
+      const filename = `war-${war.clan_tag.replace("#","")}-vs-${war.opponent_tag.replace("#","")}-${startIso}-RESENT.txt`;
+      await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
+      await sb.from("wars").update({
+        result, our_stars: ourStars, opp_stars: oppStars,
+        our_destruction: ourDes, opp_destruction: oppDes,
+        result_posted: true, updated_at: new Date().toISOString(),
+      }).eq("id", war.id);
+      await followUp(appId, token, `✅ Resent result for \`${clanTag}\` to <#${cfg.log_channel_id}> (${breaks.length} violations).`, true);
+    } catch (e) {
+      console.error("war_resend_result failed", e);
+      await followUp(appId, token, `❌ Resend failed: ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(true);
 }
 
 async function handleThEmoji(interaction: any) {
