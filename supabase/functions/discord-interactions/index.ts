@@ -8,8 +8,9 @@ import { buildClanEmbed, buildGlobalEmbed } from "../_shared/embeds.ts";
 import { normalizeTag, postCoc } from "../_shared/coc.ts";
 import { istMonthKey } from "../_shared/month.ts";
 import { canRunCommand } from "../_shared/permissions.ts";
-import { syncGuildCommands } from "../_shared/discord.ts";
+import { syncGuildCommands, createMessageWithFile } from "../_shared/discord.ts";
 import { COMMANDS } from "../_shared/commands.ts";
+import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
