@@ -478,14 +478,19 @@ async function handleWarResendResult(interaction: any) {
   const denied = await gate(interaction, "war_resend_result"); if (denied) return denied;
   const guildId = interaction.guild_id;
   const clanTag = normalizeTag(getOpt(interaction.data.options, "clan_tag"));
-  const sb = adminClient();
-  const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
-    .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
-  if (!cfg?.log_channel_id) return reply(`⚠️ No log channel configured for \`${clanTag}\`. Use \`/setup_war_log_channel\`.`);
-  const { data: war } = await sb.from("wars").select("*")
-    .eq("guild_id", guildId).eq("clan_tag", clanTag)
-    .order("start_time", { ascending: false }).limit(1).maybeSingle();
-  if (!war) return reply(`⚠️ No war found for \`${clanTag}\`.`);
+  const appId = interaction.application_id;
+  const token = interaction.token;
+
+  (async () => {
+    try {
+      const sb = adminClient();
+      const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
+        .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+      if (!cfg?.log_channel_id) { await followUp(appId, token, `⚠️ No log channel configured for \`${clanTag}\`. Use \`/setup_war_log_channel\`.`, true); return; }
+      const { data: war } = await sb.from("wars").select("*")
+        .eq("guild_id", guildId).eq("clan_tag", clanTag)
+        .order("start_time", { ascending: false }).limit(1).maybeSingle();
+      if (!war) { await followUp(appId, token, `⚠️ No war found for \`${clanTag}\`.`, true); return; }
 
   // Re-fetch current war from CoC for fresh attack data
   let cw: CurrentWar | null = null;
