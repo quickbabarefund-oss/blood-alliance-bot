@@ -478,14 +478,19 @@ async function handleWarResendResult(interaction: any) {
   const denied = await gate(interaction, "war_resend_result"); if (denied) return denied;
   const guildId = interaction.guild_id;
   const clanTag = normalizeTag(getOpt(interaction.data.options, "clan_tag"));
-  const sb = adminClient();
-  const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
-    .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
-  if (!cfg?.log_channel_id) return reply(`⚠️ No log channel configured for \`${clanTag}\`. Use \`/setup_war_log_channel\`.`);
-  const { data: war } = await sb.from("wars").select("*")
-    .eq("guild_id", guildId).eq("clan_tag", clanTag)
-    .order("start_time", { ascending: false }).limit(1).maybeSingle();
-  if (!war) return reply(`⚠️ No war found for \`${clanTag}\`.`);
+  const appId = interaction.application_id;
+  const token = interaction.token;
+
+  (async () => {
+    try {
+      const sb = adminClient();
+      const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
+        .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+      if (!cfg?.log_channel_id) { await followUp(appId, token, `⚠️ No log channel configured for \`${clanTag}\`. Use \`/setup_war_log_channel\`.`, true); return; }
+      const { data: war } = await sb.from("wars").select("*")
+        .eq("guild_id", guildId).eq("clan_tag", clanTag)
+        .order("start_time", { ascending: false }).limit(1).maybeSingle();
+      if (!war) { await followUp(appId, token, `⚠️ No war found for \`${clanTag}\`.`, true); return; }
 
   // Re-fetch current war from CoC for fresh attack data
   let cw: CurrentWar | null = null;
@@ -526,17 +531,23 @@ async function handleWarResendResult(interaction: any) {
     })));
   }
 
-  const updatedWar = { ...war, result, our_stars: ourStars, opp_stars: oppStars, our_destruction: ourDes, opp_destruction: oppDes };
-  const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
-  const startIso = (war.start_time ?? new Date().toISOString()).slice(0, 10);
-  const filename = `war-${war.clan_tag.replace("#","")}-vs-${war.opponent_tag.replace("#","")}-${startIso}-RESENT.txt`;
-  await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
-  await sb.from("wars").update({
-    result, our_stars: ourStars, opp_stars: oppStars,
-    our_destruction: ourDes, opp_destruction: oppDes,
-    result_posted: true, updated_at: new Date().toISOString(),
-  }).eq("id", war.id);
-  return reply(`✅ Resent result for \`${clanTag}\` to <#${cfg.log_channel_id}> (${breaks.length} violations).`);
+      const updatedWar = { ...war, result, our_stars: ourStars, opp_stars: oppStars, our_destruction: ourDes, opp_destruction: oppDes };
+      const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
+      const startIso = (war.start_time ?? new Date().toISOString()).slice(0, 10);
+      const filename = `war-${war.clan_tag.replace("#","")}-vs-${war.opponent_tag.replace("#","")}-${startIso}-RESENT.txt`;
+      await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
+      await sb.from("wars").update({
+        result, our_stars: ourStars, opp_stars: oppStars,
+        our_destruction: ourDes, opp_destruction: oppDes,
+        result_posted: true, updated_at: new Date().toISOString(),
+      }).eq("id", war.id);
+      await followUp(appId, token, `✅ Resent result for \`${clanTag}\` to <#${cfg.log_channel_id}> (${breaks.length} violations).`, true);
+    } catch (e) {
+      console.error("war_resend_result failed", e);
+      await followUp(appId, token, `❌ Resend failed: ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(true);
 }
 
 async function handleThEmoji(interaction: any) {
