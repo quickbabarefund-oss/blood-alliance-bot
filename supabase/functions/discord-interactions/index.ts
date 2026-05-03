@@ -8,8 +8,9 @@ import { buildClanEmbed, buildGlobalEmbed } from "../_shared/embeds.ts";
 import { normalizeTag, postCoc } from "../_shared/coc.ts";
 import { istMonthKey } from "../_shared/month.ts";
 import { canRunCommand } from "../_shared/permissions.ts";
-import { syncGuildCommands } from "../_shared/discord.ts";
+import { syncGuildCommands, createMessageWithFile } from "../_shared/discord.ts";
 import { COMMANDS } from "../_shared/commands.ts";
+import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -473,6 +474,71 @@ async function handleWarTrackRemove(interaction: any) {
   return reply(`🗑️ Removed war tracking for \`${clanTag}\`. Reminders cleared. Historical war data is kept.`);
 }
 
+async function handleWarResendResult(interaction: any) {
+  const denied = await gate(interaction, "war_resend_result"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const clanTag = normalizeTag(getOpt(interaction.data.options, "clan_tag"));
+  const sb = adminClient();
+  const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
+    .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+  if (!cfg?.log_channel_id) return reply(`⚠️ No log channel configured for \`${clanTag}\`. Use \`/setup_war_log_channel\`.`);
+  const { data: war } = await sb.from("wars").select("*")
+    .eq("guild_id", guildId).eq("clan_tag", clanTag)
+    .order("start_time", { ascending: false }).limit(1).maybeSingle();
+  if (!war) return reply(`⚠️ No war found for \`${clanTag}\`.`);
+
+  // Re-fetch current war from CoC for fresh attack data
+  let cw: CurrentWar | null = null;
+  try {
+    cw = await postCoc<CurrentWar>({ action: "current_war", tag: clanTag });
+  } catch (e) { console.error("resend fetch failed", e); }
+
+  const ourMembers = (cw?.clan?.members ?? (war.raw_roster as any)?.clan ?? []) as any[];
+  const oppMembers = (cw?.opponent?.members ?? (war.raw_roster as any)?.opponent ?? []) as any[];
+
+  // Re-persist attacks if we have fresh data
+  if (cw?.clan?.members) {
+    for (const m of cw.clan.members) {
+      for (const a of (m.attacks ?? [])) {
+        const defPos = oppMembers.find((x: any) => x.tag === a.defenderTag)?.mapPosition ?? null;
+        await sb.from("war_attacks").upsert({
+          war_id: war.id, attacker_tag: m.tag, attacker_name: m.name, attacker_th: m.townhallLevel,
+          attacker_map_pos: m.mapPosition, defender_tag: a.defenderTag, defender_map_pos: defPos,
+          stars: a.stars, destruction: Math.round(a.destructionPercentage), attack_order: a.order,
+        }, { onConflict: "war_id,attacker_tag,attack_order" });
+      }
+    }
+  }
+
+  const ourStars = cw?.clan?.stars ?? war.our_stars ?? 0;
+  const oppStars = cw?.opponent?.stars ?? war.opp_stars ?? 0;
+  const ourDes = cw?.clan?.destructionPercentage ?? war.our_destruction ?? 0;
+  const oppDes = cw?.opponent?.destructionPercentage ?? war.opp_destruction ?? 0;
+  const result = ourStars > oppStars ? "win" : ourStars < oppStars ? "lose" : (ourDes > oppDes ? "win" : ourDes < oppDes ? "lose" : "tie");
+  const decision = (war.decision ?? result) as "win" | "lose";
+  const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
+
+  const breaks = evaluateRules({ decision, endTime, ourMembers });
+  await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
+  if (breaks.length) {
+    await sb.from("war_rule_breaks").insert(breaks.map((b) => ({
+      war_id: war.id, player_tag: b.player_tag, player_name: b.player_name, rule: b.rule, detail: b.detail,
+    })));
+  }
+
+  const updatedWar = { ...war, result, our_stars: ourStars, opp_stars: oppStars, our_destruction: ourDes, opp_destruction: oppDes };
+  const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
+  const startIso = (war.start_time ?? new Date().toISOString()).slice(0, 10);
+  const filename = `war-${war.clan_tag.replace("#","")}-vs-${war.opponent_tag.replace("#","")}-${startIso}-RESENT.txt`;
+  await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
+  await sb.from("wars").update({
+    result, our_stars: ourStars, opp_stars: oppStars,
+    our_destruction: ourDes, opp_destruction: oppDes,
+    result_posted: true, updated_at: new Date().toISOString(),
+  }).eq("id", war.id);
+  return reply(`✅ Resent result for \`${clanTag}\` to <#${cfg.log_channel_id}> (${breaks.length} violations).`);
+}
+
 async function handleThEmoji(interaction: any) {
   const denied = await gate(interaction, "th_emoji"); if (denied) return denied;
   const sb = adminClient();
@@ -714,6 +780,7 @@ Deno.serve(async (req) => {
         case "th_emoji": return await handleThEmoji(interaction);
         case "war_track_list": return await handleWarTrackList(interaction);
         case "war_track_remove": return await handleWarTrackRemove(interaction);
+        case "war_resend_result": return await handleWarResendResult(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }

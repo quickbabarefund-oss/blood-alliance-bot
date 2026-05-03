@@ -204,6 +204,12 @@ export const COMMANDS: any[] = [
     ],
   },
   {
+    name: "war_resend_result", description: "Re-evaluate rules and re-post the latest war result for a clan",
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+    ],
+  },
+  {
     name: "help", description: "Show all available bot commands and what they do",
   },
 ];
