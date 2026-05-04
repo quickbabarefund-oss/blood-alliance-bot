@@ -568,6 +568,55 @@ async function handleThEmoji(interaction: any) {
   return reply("Unknown subcommand.");
 }
 
+// --- /force_reset ---
+async function handleForceReset(interaction: any): Promise<Response> {
+  // Admin-only (gate also enforces server-side)
+  if (!((BigInt(interaction.member?.permissions ?? "0")) & 0x8n)) {
+    return reply("⛔ Only server admins can run `/force_reset`.");
+  }
+  const guildId = interaction.guild_id;
+  const appId = interaction.application_id;
+  const token = interaction.token;
+  const APP_ID = Deno.env.get("DISCORD_APPLICATION_ID")!;
+  const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
+
+  (async () => {
+    const log: string[] = [];
+    try {
+      // 1. Wipe per-guild command copies for this guild (kills duplicates / stale).
+      const wipe = await fetch(
+        `https://discord.com/api/v10/applications/${APP_ID}/guilds/${guildId}/commands`,
+        { method: "PUT", headers: { Authorization: `Bot ${BOT}`, "Content-Type": "application/json" }, body: "[]" },
+      );
+      log.push(`Guild commands wiped: ${wipe.status}`);
+
+      // 2. Re-PUT global commands so visibility changes propagate.
+      const put = await fetch(
+        `https://discord.com/api/v10/applications/${APP_ID}/commands`,
+        { method: "PUT", headers: { Authorization: `Bot ${BOT}`, "Content-Type": "application/json" }, body: JSON.stringify(COMMANDS) },
+      );
+      log.push(`Global commands re-registered: ${put.status} (${COMMANDS.length} cmds)`);
+
+      // 3. Refresh guilds.commands_synced_at marker.
+      const sb = adminClient();
+      await sb.from("guilds").upsert({
+        guild_id: guildId,
+        name: interaction.guild?.name ?? null,
+        commands_synced_at: new Date().toISOString(),
+      }, { onConflict: "guild_id" });
+
+      await followUp(
+        appId, token,
+        `✅ Force-reset complete for this server.\n${log.map((l) => `• ${l}`).join("\n")}\n\n**Restart your Discord client (Ctrl+R)** to refresh the slash menu.`,
+        true,
+      );
+    } catch (e) {
+      await followUp(appId, token, `❌ Force-reset failed: ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(true);
+}
+
 // --- /help ---
 function handleHelp(_interaction: any): Response {
   const sections: { title: string; lines: string[] }[] = [
@@ -792,6 +841,7 @@ Deno.serve(async (req) => {
         case "war_track_list": return await handleWarTrackList(interaction);
         case "war_track_remove": return await handleWarTrackRemove(interaction);
         case "war_resend_result": return await handleWarResendResult(interaction);
+        case "force_reset": return await handleForceReset(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }

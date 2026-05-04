@@ -212,4 +212,9 @@ export const COMMANDS: any[] = [
   {
     name: "help", description: "Show all available bot commands and what they do",
   },
+  {
+    name: "force_reset",
+    description: "Force-reset slash commands for this server (wipes guild copies & re-syncs globals)",
+    default_member_permissions: ADMIN_ONLY,
+  },
 ];
