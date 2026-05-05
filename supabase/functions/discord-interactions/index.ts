@@ -665,17 +665,15 @@ async function handleDonationReset(interaction: any): Promise<Response> {
         await sb.from("donation_snapshots").delete().eq("clan_tag", tag);
       }
 
-      // Trigger an immediate poll to re-baseline snapshots & refresh leaderboards
-      try {
-        await fetch(`${SUPABASE_URL}/functions/v1/poll-clans`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-          body: clanTags.length === 1 ? JSON.stringify({ clan_tag: clanTags[0] }) : "{}",
-        });
-      } catch (e) { console.error("post-reset poll trigger failed", e); }
-
       const scope = clanArg ? `\`${clanTags[0]}\`` : `**all ${clanTags.length} tracked clan(s)**`;
-      await followUp(appId, token, `✅ Donation totals reset to 0 for ${scope} (month \`${monthKey}\`). ${totalRows} player rows zeroed; leaderboard refreshing.`, true);
+      await followUp(appId, token, `✅ Donation totals reset to 0 for ${scope} (month \`${monthKey}\`). ${totalRows} player rows zeroed. Leaderboard will refresh on next poll (within ~5 min) or you can run \`/refresh\`.`, true);
+
+      // Fire-and-forget: trigger an immediate poll to re-baseline snapshots
+      fetch(`${SUPABASE_URL}/functions/v1/poll-clans`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+        body: clanTags.length === 1 ? JSON.stringify({ clan_tag: clanTags[0] }) : "{}",
+      }).catch((e) => console.error("post-reset poll trigger failed", e));
     } catch (e) {
       console.error("donation_reset failed", e);
       await followUp(appId, token, `❌ Reset failed: ${e instanceof Error ? e.message : String(e)}`, true);
