@@ -11,6 +11,7 @@ import { canRunCommand } from "../_shared/permissions.ts";
 import { syncGuildCommands, createMessageWithFile } from "../_shared/discord.ts";
 import { COMMANDS } from "../_shared/commands.ts";
 import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
+import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily } from "../_shared/family.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -830,6 +831,117 @@ async function handleWarDecide(interaction: any): Promise<Response> {
   }), { headers: { "Content-Type": "application/json" } });
 }
 
+
+// =================== Family Clan Dashboard ===================
+
+async function handleFamilyCategory(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_category"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { sub, options } = getSubOptions(interaction.data.options);
+
+  if (sub === "list") {
+    const { data } = await sb.from("family_categories").select("id,name,position").eq("guild_id", guildId).order("position").order("name");
+    if (!data?.length) return reply("No categories yet. Add one with `/family_category add <name>`.");
+    return reply(data.map((c, i) => `\`${i + 1}.\` **${c.name}**`).join("\n"));
+  }
+
+  if (sub === "add") {
+    const name = String(getOpt(options, "name") ?? "").trim();
+    if (!name) return reply("Name is required.");
+    const { error } = await sb.from("family_categories").insert({ guild_id: guildId, name });
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`✅ Category **${name}** created.`);
+  }
+  if (sub === "remove") {
+    const name = String(getOpt(options, "name") ?? "").trim();
+    const { error } = await sb.from("family_categories").delete().eq("guild_id", guildId).eq("name", name);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`🗑️ Removed category **${name}** and its clans.`);
+  }
+  if (sub === "rename") {
+    const oldName = String(getOpt(options, "old_name") ?? "").trim();
+    const newName = String(getOpt(options, "new_name") ?? "").trim();
+    const { error } = await sb.from("family_categories").update({ name: newName }).eq("guild_id", guildId).eq("name", oldName);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`✏️ Renamed **${oldName}** → **${newName}**.`);
+  }
+  return reply("Unknown subcommand.");
+}
+
+async function handleFamilyClan(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_clan"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { sub, options } = getSubOptions(interaction.data.options);
+
+  if (sub === "list") {
+    const { categories, clans } = await loadFamily(guildId);
+    if (!categories.length) return reply("No categories yet.");
+    const lines: string[] = [];
+    for (const cat of categories) {
+      lines.push(`**${cat.name}**`);
+      const cs = clans.filter((c) => c.category_id === cat.id);
+      lines.push(cs.length ? cs.map((c) => `  • \`${c.clan_tag}\``).join("\n") : "  _empty_");
+    }
+    return reply(lines.join("\n"));
+  }
+
+  async function findCat(name: string) {
+    const { data } = await sb.from("family_categories").select("id,name").eq("guild_id", guildId).ilike("name", name).maybeSingle();
+    return data;
+  }
+
+  if (sub === "add") {
+    const catName = String(getOpt(options, "category") ?? "").trim();
+    const tag = normalizeTag(getOpt(options, "clan_tag"));
+    const cat = await findCat(catName);
+    if (!cat) return reply(`❌ Category \`${catName}\` not found. Create it with \`/family_category add\`.`);
+    const { error } = await sb.from("family_clans").insert({ guild_id: guildId, category_id: cat.id, clan_tag: tag });
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`✅ Added \`${tag}\` to **${cat.name}**.`);
+  }
+  if (sub === "remove") {
+    const catName = String(getOpt(options, "category") ?? "").trim();
+    const tag = normalizeTag(getOpt(options, "clan_tag"));
+    const cat = await findCat(catName);
+    if (!cat) return reply(`❌ Category \`${catName}\` not found.`);
+    const { error } = await sb.from("family_clans").delete().eq("guild_id", guildId).eq("category_id", cat.id).eq("clan_tag", tag);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`🗑️ Removed \`${tag}\` from **${cat.name}**.`);
+  }
+  if (sub === "move") {
+    const tag = normalizeTag(getOpt(options, "clan_tag"));
+    const toName = String(getOpt(options, "to_category") ?? "").trim();
+    const cat = await findCat(toName);
+    if (!cat) return reply(`❌ Category \`${toName}\` not found.`);
+    const { error } = await sb.from("family_clans").update({ category_id: cat.id }).eq("guild_id", guildId).eq("clan_tag", tag);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`➡️ Moved \`${tag}\` to **${cat.name}**.`);
+  }
+  return reply("Unknown subcommand.");
+}
+
+async function handleFamilyDashboard(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_clan_dashboard"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const channel = getOpt(interaction.data.options, "channel") ?? interaction.channel_id;
+
+  await sb.from("family_dashboards").upsert({
+    guild_id: guildId, channel_id: channel, message_id: null, updated_at: new Date().toISOString(),
+  });
+  const r = await syncDashboardMessage(guildId);
+  if (!r.ok) return reply(`❌ Failed to post dashboard: ${r.error}`);
+  return reply(`✅ Family Clan Dashboard registered in <#${channel}>. It will auto-update when you change clans/categories.`);
+}
+
 // --- Server ---
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -875,6 +987,11 @@ Deno.serve(async (req) => {
       if (cid.startsWith("war:decide:")) {
         return await handleWarDecide(interaction);
       }
+      if (cid.startsWith("fam:view:")) {
+        const tag = interaction.data?.values?.[0];
+        const data = await buildClanDetailEmbed(tag);
+        return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
       console.error("component handler error", e);
@@ -908,6 +1025,9 @@ Deno.serve(async (req) => {
         case "war_resend_result": return await handleWarResendResult(interaction);
         case "force_reset": return await handleForceReset(interaction);
         case "donation_reset": return await handleDonationReset(interaction);
+        case "family_category": return await handleFamilyCategory(interaction);
+        case "family_clan": return await handleFamilyClan(interaction);
+        case "family_clan_dashboard": return await handleFamilyDashboard(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }

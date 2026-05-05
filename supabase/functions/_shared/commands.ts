@@ -225,4 +225,50 @@ export const COMMANDS: any[] = [
       { type: STRING, name: "clan_tag", description: "Clan tag (omit to reset ALL tracked clans in this server)" },
     ],
   },
+  {
+    name: "family_category",
+    description: "Manage Family Dashboard categories (e.g. Farming, War, Competitive)",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: SUB, name: "add", description: "Create a new category", options: [
+        { type: STRING, name: "name", description: "Category name", required: true },
+      ]},
+      { type: SUB, name: "remove", description: "Delete a category and all its clans", options: [
+        { type: STRING, name: "name", description: "Category name", required: true },
+      ]},
+      { type: SUB, name: "rename", description: "Rename a category", options: [
+        { type: STRING, name: "old_name", description: "Current name", required: true },
+        { type: STRING, name: "new_name", description: "New name", required: true },
+      ]},
+      { type: SUB, name: "list", description: "List all categories" },
+    ],
+  },
+  {
+    name: "family_clan",
+    description: "Add/remove/update clans on the Family Dashboard",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: SUB, name: "add", description: "Add a clan to a category", options: [
+        { type: STRING, name: "category", description: "Category name", required: true },
+        { type: STRING, name: "clan_tag", description: "Clan tag (e.g. #ABC123)", required: true },
+      ]},
+      { type: SUB, name: "remove", description: "Remove a clan from a category", options: [
+        { type: STRING, name: "category", description: "Category name", required: true },
+        { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+      ]},
+      { type: SUB, name: "move", description: "Move a clan to another category", options: [
+        { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+        { type: STRING, name: "to_category", description: "Destination category", required: true },
+      ]},
+      { type: SUB, name: "list", description: "List all clans grouped by category" },
+    ],
+  },
+  {
+    name: "family_clan_dashboard",
+    description: "Post / re-bind the Family Clan Dashboard message in this channel",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: CHANNEL, name: "channel", description: "Target channel (defaults to current channel)" },
+    ],
+  },
 ];

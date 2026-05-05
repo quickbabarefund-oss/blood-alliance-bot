@@ -164,6 +164,86 @@ export type Database = {
         }
         Relationships: []
       }
+      family_categories: {
+        Row: {
+          created_at: string
+          guild_id: string
+          id: number
+          name: string
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          guild_id: string
+          id?: number
+          name: string
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          guild_id?: string
+          id?: number
+          name?: string
+          position?: number
+        }
+        Relationships: []
+      }
+      family_clans: {
+        Row: {
+          added_at: string
+          category_id: number
+          clan_tag: string
+          guild_id: string
+          id: number
+          position: number
+        }
+        Insert: {
+          added_at?: string
+          category_id: number
+          clan_tag: string
+          guild_id: string
+          id?: number
+          position?: number
+        }
+        Update: {
+          added_at?: string
+          category_id?: number
+          clan_tag?: string
+          guild_id?: string
+          id?: number
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "family_clans_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "family_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      family_dashboards: {
+        Row: {
+          channel_id: string
+          guild_id: string
+          message_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel_id: string
+          guild_id: string
+          message_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel_id?: string
+          guild_id?: string
+          message_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       guilds: {
         Row: {
           commands_synced_at: string | null
