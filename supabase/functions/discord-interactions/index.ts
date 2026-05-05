@@ -1025,6 +1025,9 @@ Deno.serve(async (req) => {
         case "war_resend_result": return await handleWarResendResult(interaction);
         case "force_reset": return await handleForceReset(interaction);
         case "donation_reset": return await handleDonationReset(interaction);
+        case "family_category": return await handleFamilyCategory(interaction);
+        case "family_clan": return await handleFamilyClan(interaction);
+        case "family_clan_dashboard": return await handleFamilyDashboard(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
