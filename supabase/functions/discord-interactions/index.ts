@@ -909,6 +909,7 @@ Deno.serve(async (req) => {
         case "war_track_remove": return await handleWarTrackRemove(interaction);
         case "war_resend_result": return await handleWarResendResult(interaction);
         case "force_reset": return await handleForceReset(interaction);
+        case "donation_reset": return await handleDonationReset(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
