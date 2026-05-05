@@ -217,4 +217,12 @@ export const COMMANDS: any[] = [
     description: "Force-reset slash commands for this server (wipes guild copies & re-syncs globals)",
     default_member_permissions: ADMIN_ONLY,
   },
+  {
+    name: "donation_reset",
+    description: "Reset this month's donation totals to 0 for one clan or all clans in this server",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag (omit to reset ALL tracked clans in this server)" },
+    ],
+  },
 ];

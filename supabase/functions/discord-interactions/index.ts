@@ -617,6 +617,73 @@ async function handleForceReset(interaction: any): Promise<Response> {
   return deferred(true);
 }
 
+// --- /donation_reset ---
+async function handleDonationReset(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "donation_reset"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const opts = interaction.data.options ?? [];
+  const clanArg = getOpt(opts, "clan_tag");
+  const appId = interaction.application_id;
+  const token = interaction.token;
+
+  (async () => {
+    try {
+      const sb = adminClient();
+      const monthKey = istMonthKey();
+
+      // Resolve clan tags scoped to this guild
+      let clanTags: string[] = [];
+      if (clanArg) {
+        const tag = normalizeTag(clanArg);
+        const { data } = await sb.from("clans").select("tag").eq("guild_id", guildId).eq("tag", tag).maybeSingle();
+        if (!data) {
+          await followUp(appId, token, `❌ Clan \`${tag}\` is not tracked in this server.`, true);
+          return;
+        }
+        clanTags = [tag];
+      } else {
+        const { data } = await sb.from("clans").select("tag").eq("guild_id", guildId).eq("active", true);
+        clanTags = (data ?? []).map((c: any) => c.tag);
+      }
+
+      if (clanTags.length === 0) {
+        await followUp(appId, token, "⚠️ No tracked clans in this server.", true);
+        return;
+      }
+
+      let totalRows = 0;
+      for (const tag of clanTags) {
+        // Zero out monthly aggregates
+        const { data: agg, error: aggErr } = await sb.from("monthly_aggregates")
+          .update({ donations: 0, donations_received: 0, updated_at: new Date().toISOString() })
+          .eq("month_key", monthKey).eq("clan_tag", tag)
+          .select("id");
+        if (aggErr) throw aggErr;
+        totalRows += agg?.length ?? 0;
+
+        // Re-baseline: delete snapshots so next poll starts fresh from current in-game values
+        await sb.from("donation_snapshots").delete().eq("clan_tag", tag);
+      }
+
+      // Trigger an immediate poll to re-baseline snapshots & refresh leaderboards
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/poll-clans`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+          body: clanTags.length === 1 ? JSON.stringify({ clan_tag: clanTags[0] }) : "{}",
+        });
+      } catch (e) { console.error("post-reset poll trigger failed", e); }
+
+      const scope = clanArg ? `\`${clanTags[0]}\`` : `**all ${clanTags.length} tracked clan(s)**`;
+      await followUp(appId, token, `✅ Donation totals reset to 0 for ${scope} (month \`${monthKey}\`). ${totalRows} player rows zeroed; leaderboard refreshing.`, true);
+    } catch (e) {
+      console.error("donation_reset failed", e);
+      await followUp(appId, token, `❌ Reset failed: ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(true);
+}
+
 // --- /help ---
 function handleHelp(_interaction: any): Response {
   const sections: { title: string; lines: string[] }[] = [
@@ -842,6 +909,7 @@ Deno.serve(async (req) => {
         case "war_track_remove": return await handleWarTrackRemove(interaction);
         case "war_resend_result": return await handleWarResendResult(interaction);
         case "force_reset": return await handleForceReset(interaction);
+        case "donation_reset": return await handleDonationReset(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
