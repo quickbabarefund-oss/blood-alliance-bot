@@ -192,6 +192,7 @@ export type Database = {
         Row: {
           added_at: string
           category_id: number
+          clan_name: string
           clan_tag: string
           guild_id: string
           id: number
@@ -200,6 +201,7 @@ export type Database = {
         Insert: {
           added_at?: string
           category_id: number
+          clan_name?: string
           clan_tag: string
           guild_id: string
           id?: number
@@ -208,6 +210,7 @@ export type Database = {
         Update: {
           added_at?: string
           category_id?: number
+          clan_name?: string
           clan_tag?: string
           guild_id?: string
           id?: number

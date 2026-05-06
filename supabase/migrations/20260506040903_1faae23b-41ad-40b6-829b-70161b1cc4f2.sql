@@ -1,0 +1,1 @@
+ALTER TABLE public.family_clans ADD COLUMN IF NOT EXISTS clan_name text NOT NULL DEFAULT '';
