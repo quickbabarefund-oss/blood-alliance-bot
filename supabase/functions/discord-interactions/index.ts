@@ -945,6 +945,88 @@ async function handleFamilyDashboard(interaction: any): Promise<Response> {
   return reply(`✅ Family Clan Dashboard registered in <#${channel}>. It will auto-update when you change clans/categories.`);
 }
 
+function parseHexColor(s: string): number | null {
+  const m = s.trim().replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6}$/.test(m)) return null;
+  return parseInt(m, 16);
+}
+
+async function handleFamilyCustomize(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_customize"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const opts = interaction.data.options ?? [];
+
+  const { data: existing } = await sb.from("family_dashboards").select("*").eq("guild_id", guildId).maybeSingle();
+  if (!existing) return reply("❌ No dashboard registered yet. Run `/family_clan_dashboard` first.");
+
+  const reset = getOpt(opts, "reset") === true;
+  const refreshNames = getOpt(opts, "refresh_names") === true;
+
+  const patch: Record<string, any> = {};
+  if (reset) {
+    Object.assign(patch, {
+      title: "🏛️ Family Clan Dashboard",
+      description: null,
+      color: 0x5865F2,
+      footer_text: null,
+      show_timestamp: false,
+      thumbnail_url: null,
+      image_url: null,
+      category_emoji: "🏰",
+      clan_line_format: "`{i}.` **{name}** `{tag}`",
+    });
+  }
+
+  const setStr = (key: string, optName: string) => {
+    const v = getOpt(opts, optName);
+    if (v == null) return;
+    const s = String(v);
+    patch[key] = s === "-" ? null : s.replace(/\\n/g, "\n");
+  };
+  setStr("title", "title");
+  setStr("description", "description");
+  setStr("footer_text", "footer");
+  setStr("thumbnail_url", "thumbnail_url");
+  setStr("image_url", "image_url");
+  setStr("category_emoji", "category_emoji");
+  setStr("clan_line_format", "clan_line_format");
+
+  const showTs = getOpt(opts, "show_timestamp");
+  if (showTs != null) patch.show_timestamp = !!showTs;
+
+  const colorRaw = getOpt(opts, "color");
+  if (colorRaw != null) {
+    const c = parseHexColor(String(colorRaw));
+    if (c == null) return reply("❌ Invalid color. Use a hex like `#5865F2`.");
+    patch.color = c;
+  }
+
+  if (Object.keys(patch).length) {
+    const { error } = await sb.from("family_dashboards").update(patch).eq("guild_id", guildId);
+    if (error) return reply(`❌ ${error.message}`);
+  }
+
+  if (refreshNames) {
+    const { data: clans } = await sb.from("family_clans").select("clan_tag").eq("guild_id", guildId);
+    (async () => {
+      for (const c of clans ?? []) {
+        try { await refreshClanName(guildId, c.clan_tag); } catch (e) { console.error(e); }
+      }
+      syncDashboardMessage(guildId).catch((e) => console.error("sync", e));
+    })();
+  } else {
+    syncDashboardMessage(guildId).catch((e) => console.error("sync", e));
+  }
+
+  const summary: string[] = [];
+  if (reset) summary.push("reset to defaults");
+  for (const k of Object.keys(patch)) if (k !== "color") summary.push(k);
+  if ("color" in patch) summary.push("color");
+  if (refreshNames) summary.push("refreshing clan names from CoC API");
+  return reply(`✅ Dashboard updated: ${summary.join(", ") || "no changes"}.`);
+}
+
 // --- Server ---
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
