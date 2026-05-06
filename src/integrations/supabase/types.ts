@@ -192,6 +192,7 @@ export type Database = {
         Row: {
           added_at: string
           category_id: number
+          clan_name: string
           clan_tag: string
           guild_id: string
           id: number
@@ -200,6 +201,7 @@ export type Database = {
         Insert: {
           added_at?: string
           category_id: number
+          clan_name?: string
           clan_tag: string
           guild_id: string
           id?: number
@@ -208,6 +210,7 @@ export type Database = {
         Update: {
           added_at?: string
           category_id?: number
+          clan_name?: string
           clan_tag?: string
           guild_id?: string
           id?: number
@@ -225,21 +228,48 @@ export type Database = {
       }
       family_dashboards: {
         Row: {
+          category_emoji: string
           channel_id: string
+          clan_line_format: string
+          color: number
+          description: string | null
+          footer_text: string | null
           guild_id: string
+          image_url: string | null
           message_id: string | null
+          show_timestamp: boolean
+          thumbnail_url: string | null
+          title: string
           updated_at: string
         }
         Insert: {
+          category_emoji?: string
           channel_id: string
+          clan_line_format?: string
+          color?: number
+          description?: string | null
+          footer_text?: string | null
           guild_id: string
+          image_url?: string | null
           message_id?: string | null
+          show_timestamp?: boolean
+          thumbnail_url?: string | null
+          title?: string
           updated_at?: string
         }
         Update: {
+          category_emoji?: string
           channel_id?: string
+          clan_line_format?: string
+          color?: number
+          description?: string | null
+          footer_text?: string | null
           guild_id?: string
+          image_url?: string | null
           message_id?: string | null
+          show_timestamp?: boolean
+          thumbnail_url?: string | null
+          title?: string
           updated_at?: string
         }
         Relationships: []

@@ -8,6 +8,7 @@ const INTEGER = 4;
 const USER = 6;
 const ROLE = 8;
 const SUB = 1;
+const BOOLEAN = 5;
 
 // 0 = no one (admins only) — server admins can loosen via Server Settings → Integrations
 const ADMIN_ONLY = "0";
@@ -269,6 +270,24 @@ export const COMMANDS: any[] = [
     default_member_permissions: ADMIN_ONLY,
     options: [
       { type: CHANNEL, name: "channel", description: "Target channel (defaults to current channel)" },
+    ],
+  },
+  {
+    name: "family_customize",
+    description: "Customize the Family Clan Dashboard look (title, color, footer, line format, etc.)",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: STRING, name: "title", description: "Embed title" },
+      { type: STRING, name: "description", description: "Embed description (use \\n for new lines, '-' to clear)" },
+      { type: STRING, name: "color", description: "Hex color e.g. #5865F2" },
+      { type: STRING, name: "footer", description: "Footer text ('-' to clear)" },
+      { type: BOOLEAN, name: "show_timestamp", description: "Show 'updated at' timestamp" },
+      { type: STRING, name: "thumbnail_url", description: "Thumbnail image URL ('-' to clear)" },
+      { type: STRING, name: "image_url", description: "Large banner image URL ('-' to clear)" },
+      { type: STRING, name: "category_emoji", description: "Emoji shown before each category name (e.g. 🏰)" },
+      { type: STRING, name: "clan_line_format", description: "Per-clan line. Vars: {i} {name} {tag}. Default: `{i}.` **{name}** `{tag}`" },
+      { type: BOOLEAN, name: "refresh_names", description: "Re-fetch all clan names from CoC API" },
+      { type: BOOLEAN, name: "reset", description: "Reset all customization to defaults" },
     ],
   },
 ];
