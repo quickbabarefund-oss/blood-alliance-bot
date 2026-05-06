@@ -8,6 +8,7 @@ const INTEGER = 4;
 const USER = 6;
 const ROLE = 8;
 const SUB = 1;
+const BOOLEAN = 5;
 
 // 0 = no one (admins only) — server admins can loosen via Server Settings → Integrations
 const ADMIN_ONLY = "0";
