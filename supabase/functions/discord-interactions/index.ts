@@ -902,7 +902,10 @@ async function handleFamilyClan(interaction: any): Promise<Response> {
     if (!cat) return reply(`❌ Category \`${catName}\` not found. Create it with \`/family_category add\`.`);
     const { error } = await sb.from("family_clans").insert({ guild_id: guildId, category_id: cat.id, clan_tag: tag });
     if (error) return reply(`❌ ${error.message}`);
-    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    // best-effort fetch + cache the clan name, then sync
+    refreshClanName(guildId, tag).finally(() => {
+      syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    });
     return reply(`✅ Added \`${tag}\` to **${cat.name}**.`);
   }
   if (sub === "remove") {
