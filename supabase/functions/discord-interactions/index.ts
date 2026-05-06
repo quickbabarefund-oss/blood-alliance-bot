@@ -937,9 +937,16 @@ async function handleFamilyDashboard(interaction: any): Promise<Response> {
   const sb = adminClient();
   const channel = getOpt(interaction.data.options, "channel") ?? interaction.channel_id;
 
-  await sb.from("family_dashboards").upsert({
-    guild_id: guildId, channel_id: channel, message_id: null, updated_at: new Date().toISOString(),
-  });
+  const { data: existing } = await sb.from("family_dashboards").select("guild_id").eq("guild_id", guildId).maybeSingle();
+  if (existing) {
+    await sb.from("family_dashboards").update({
+      channel_id: channel, message_id: null, updated_at: new Date().toISOString(),
+    }).eq("guild_id", guildId);
+  } else {
+    await sb.from("family_dashboards").insert({
+      guild_id: guildId, channel_id: channel, message_id: null,
+    });
+  }
   const r = await syncDashboardMessage(guildId);
   if (!r.ok) return reply(`❌ Failed to post dashboard: ${r.error}`);
   return reply(`✅ Family Clan Dashboard registered in <#${channel}>. It will auto-update when you change clans/categories.`);
