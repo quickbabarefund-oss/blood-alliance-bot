@@ -3,22 +3,63 @@ import { adminClient } from "./leaderboard.ts";
 import { fetchClan, normalizeTag, type CoCClan } from "./coc.ts";
 
 const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
-const COLOR = 0x5865F2;
+const DEFAULT_COLOR = 0x5865F2;
 
-export interface FamilyClanRow { id: number; category_id: number; clan_tag: string; position: number }
+export interface FamilyClanRow { id: number; category_id: number; clan_tag: string; clan_name: string; position: number }
 export interface FamilyCategoryRow { id: number; name: string; position: number }
+export interface FamilyDashboardCfg {
+  guild_id: string;
+  channel_id: string;
+  message_id: string | null;
+  title: string;
+  description: string | null;
+  color: number;
+  footer_text: string | null;
+  show_timestamp: boolean;
+  thumbnail_url: string | null;
+  image_url: string | null;
+  category_emoji: string;
+  clan_line_format: string;
+}
 
 export async function loadFamily(guildId: string) {
   const sb = adminClient();
   const [{ data: cats }, { data: clans }] = await Promise.all([
     sb.from("family_categories").select("id,name,position").eq("guild_id", guildId).order("position").order("name"),
-    sb.from("family_clans").select("id,category_id,clan_tag,position").eq("guild_id", guildId).order("position"),
+    sb.from("family_clans").select("id,category_id,clan_tag,clan_name,position").eq("guild_id", guildId).order("position"),
   ]);
   return { categories: (cats ?? []) as FamilyCategoryRow[], clans: (clans ?? []) as FamilyClanRow[] };
 }
 
-// Build the dashboard summary embed (overview of all categories / clans by tag)
-export async function buildDashboardPayload(guildId: string): Promise<any> {
+// Fetch & cache clan name (best-effort; fall back to existing/empty)
+export async function refreshClanName(guildId: string, clanTag: string): Promise<string> {
+  const tag = normalizeTag(clanTag);
+  try {
+    const c = await fetchClan(tag);
+    const name = c?.name ?? "";
+    if (name) {
+      await adminClient().from("family_clans")
+        .update({ clan_name: name }).eq("guild_id", guildId).eq("clan_tag", tag);
+    }
+    return name;
+  } catch (e) {
+    console.error("refreshClanName failed", tag, e);
+    return "";
+  }
+}
+
+function formatLine(tpl: string, vars: Record<string, string | number>) {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+}
+
+// Build the dashboard summary embed using the saved customization
+export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboardCfg | null): Promise<any> {
+  const sb = adminClient();
+  if (!cfg) {
+    const { data } = await sb.from("family_dashboards").select("*").eq("guild_id", guildId).maybeSingle();
+    cfg = data as FamilyDashboardCfg | null;
+  }
+  const c = cfg ?? ({} as FamilyDashboardCfg);
   const { categories, clans } = await loadFamily(guildId);
   const fields: any[] = [];
 
@@ -26,18 +67,22 @@ export async function buildDashboardPayload(guildId: string): Promise<any> {
     fields.push({ name: "No categories yet", value: "Use `/family_category add <name>` to create one, then `/family_clan add` to populate.", inline: false });
   }
 
+  const emoji = c.category_emoji || "🏰";
+  const lineTpl = c.clan_line_format || "`{i}.` **{name}** `{tag}`";
+
   for (const cat of categories) {
-    const cs = clans.filter((c) => c.category_id === cat.id);
+    const cs = clans.filter((x) => x.category_id === cat.id);
     const value = cs.length
-      ? cs.map((c, i) => `\`${i + 1}.\` **${c.clan_tag}**`).join("\n")
+      ? cs.map((cl, i) => formatLine(lineTpl, {
+          i: i + 1, tag: cl.clan_tag, name: cl.clan_name || cl.clan_tag,
+        })).join("\n")
       : "_No clans yet_";
-    fields.push({ name: `🏰 ${cat.name} — ${cs.length}`, value, inline: false });
+    fields.push({ name: `${emoji} ${cat.name} — ${cs.length}`, value, inline: false });
   }
 
-  // One select menu per category (max 25 options, max 5 menus = 5 action rows)
   const components: any[] = [];
   for (const cat of categories.slice(0, 5)) {
-    const cs = clans.filter((c) => c.category_id === cat.id).slice(0, 25);
+    const cs = clans.filter((x) => x.category_id === cat.id).slice(0, 25);
     if (!cs.length) continue;
     components.push({
       type: 1,
@@ -45,19 +90,24 @@ export async function buildDashboardPayload(guildId: string): Promise<any> {
         type: 3,
         custom_id: `fam:view:${cat.id}`,
         placeholder: `🔎 ${cat.name} — pick a clan to view details`,
-        options: cs.map((c) => ({ label: c.clan_tag.slice(0, 100), value: c.clan_tag })),
+        options: cs.map((cl) => ({
+          label: (cl.clan_name ? `${cl.clan_name} (${cl.clan_tag})` : cl.clan_tag).slice(0, 100),
+          value: cl.clan_tag,
+        })),
       }],
     });
   }
 
-  const embed = {
-    title: "🏛️ Family Clan Dashboard",
-    description: "All official clans grouped by category. Use the select menus below to view full clan info (leader, co-leaders, members).",
-    color: COLOR,
+  const embed: any = {
+    title: c.title || "🏛️ Family Clan Dashboard",
+    color: c.color ?? DEFAULT_COLOR,
     fields,
-    footer: { text: "Updated automatically when /family_clan or /family_category commands run." },
-    timestamp: new Date().toISOString(),
   };
+  if (c.description) embed.description = c.description;
+  if (c.thumbnail_url) embed.thumbnail = { url: c.thumbnail_url };
+  if (c.image_url) embed.image = { url: c.image_url };
+  if (c.footer_text) embed.footer = { text: c.footer_text };
+  if (c.show_timestamp) embed.timestamp = new Date().toISOString();
 
   return { embeds: [embed], components, allowed_mentions: { parse: [] } };
 }
@@ -67,7 +117,7 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
   let clan: CoCClan | null = null;
   try { clan = await fetchClan(clanTag); }
   catch (e) {
-    return { embeds: [{ title: "⚠️ Clan lookup failed", description: `Could not fetch \`${clanTag}\`: ${e instanceof Error ? e.message : String(e)}`, color: 0xED4245 }] };
+    return { embeds: [{ title: "⚠️ Clan lookup failed", description: `Could not fetch \`${clanTag}\`: ${e instanceof Error ? e.message : String(e)}`, color: 0xED4245 }], flags: 64 };
   }
   const c: any = clan ?? {};
   const members: any[] = c.memberList ?? [];
@@ -102,7 +152,7 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
   const embed = {
     title: `🏰 ${c.name ?? clanTag}`,
     description: c.description ? String(c.description).slice(0, 300) : undefined,
-    color: COLOR,
+    color: DEFAULT_COLOR,
     thumbnail: c.badgeUrls?.medium ? { url: c.badgeUrls.medium } : undefined,
     fields,
     footer: { text: "Live from Clash of Clans" },
@@ -117,9 +167,8 @@ export async function syncDashboardMessage(guildId: string): Promise<{ ok: boole
   const { data: cfg } = await sb.from("family_dashboards").select("*").eq("guild_id", guildId).maybeSingle();
   if (!cfg) return { ok: false, error: "no dashboard registered. Run `/family_clan_dashboard` first." };
 
-  const payload = await buildDashboardPayload(guildId);
+  const payload = await buildDashboardPayload(guildId, cfg as FamilyDashboardCfg);
 
-  // Try editing the existing message
   if (cfg.message_id) {
     const r = await fetch(`https://discord.com/api/v10/channels/${cfg.channel_id}/messages/${cfg.message_id}`, {
       method: "PATCH",
@@ -130,10 +179,8 @@ export async function syncDashboardMessage(guildId: string): Promise<{ ok: boole
       await sb.from("family_dashboards").update({ updated_at: new Date().toISOString() }).eq("guild_id", guildId);
       return { ok: true };
     }
-    // fall through to recreate
   }
 
-  // Create a new message
   const r2 = await fetch(`https://discord.com/api/v10/channels/${cfg.channel_id}/messages`, {
     method: "POST",
     headers: { Authorization: `Bot ${BOT}`, "Content-Type": "application/json" },
@@ -141,12 +188,9 @@ export async function syncDashboardMessage(guildId: string): Promise<{ ok: boole
   });
   if (!r2.ok) return { ok: false, error: `Discord ${r2.status}: ${(await r2.text()).slice(0, 200)}` };
   const j = await r2.json();
-  await sb.from("family_dashboards").upsert({
-    guild_id: guildId,
-    channel_id: cfg.channel_id,
-    message_id: j.id,
-    updated_at: new Date().toISOString(),
-  });
+  await sb.from("family_dashboards").update({
+    message_id: j.id, updated_at: new Date().toISOString(),
+  }).eq("guild_id", guildId);
   return { ok: true };
 }
 
