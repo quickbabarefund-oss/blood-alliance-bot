@@ -1,0 +1,2 @@
+[functions.embed-templates-api]
+verify_jwt = false
