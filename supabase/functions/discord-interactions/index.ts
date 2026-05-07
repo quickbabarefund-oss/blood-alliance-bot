@@ -1121,6 +1121,7 @@ Deno.serve(async (req) => {
         case "family_clan": return await handleFamilyClan(interaction);
         case "family_clan_dashboard": return await handleFamilyDashboard(interaction);
         case "family_customize": return await handleFamilyCustomize(interaction);
+        case "embed_editor": return await handleEmbedEditor(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
