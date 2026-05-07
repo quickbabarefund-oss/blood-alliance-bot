@@ -1034,7 +1034,27 @@ async function handleFamilyCustomize(interaction: any): Promise<Response> {
   return reply(`✅ Dashboard updated: ${summary.join(", ") || "no changes"}.`);
 }
 
-// --- Server ---
+// --- /embed_editor ---
+const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://clan-loot-tracker.lovable.app";
+async function handleEmbedEditor(interaction: any): Promise<Response> {
+  if (!((BigInt(interaction.member?.permissions ?? "0")) & 0x8n)) {
+    return reply("⛔ Only server admins can open the embed editor.");
+  }
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1h
+  await sb.from("embed_edit_tokens").insert({
+    token, guild_id: guildId, issued_by: callerUserId(interaction), expires_at: expires,
+  });
+  const url = `${PUBLIC_APP_URL}/embeds?token=${token}`;
+  return replyEmbed({
+    title: "🎨 Embed Editor",
+    description: `Open this private link to customize all bot embeds for this server.\n\n[**Open Embed Editor →**](${url})\n\n⏰ Link expires in **60 minutes**.`,
+    color: COLOR_BLURPLE,
+  }, true);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("ok");
@@ -1121,6 +1141,7 @@ Deno.serve(async (req) => {
         case "family_clan": return await handleFamilyClan(interaction);
         case "family_clan_dashboard": return await handleFamilyDashboard(interaction);
         case "family_customize": return await handleFamilyCustomize(interaction);
+        case "embed_editor": return await handleEmbedEditor(interaction);
         case "help": return handleHelp(interaction);
         default: return reply(`Unknown command: ${name}`);
       }

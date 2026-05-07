@@ -20,3 +20,7 @@ verify_jwt = false
 
 [functions.coc-link-sync]
 verify_jwt = false
+
+[functions.embed-templates-api]
+verify_jwt = false
+

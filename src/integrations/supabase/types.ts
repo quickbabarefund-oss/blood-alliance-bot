@@ -164,6 +164,81 @@ export type Database = {
         }
         Relationships: []
       }
+      embed_edit_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          guild_id: string
+          issued_by: string | null
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          guild_id: string
+          issued_by?: string | null
+          token: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          guild_id?: string
+          issued_by?: string | null
+          token?: string
+        }
+        Relationships: []
+      }
+      embed_templates: {
+        Row: {
+          color: number | null
+          content: string | null
+          description: string | null
+          enabled: boolean
+          fields: Json
+          footer_text: string | null
+          guild_id: string
+          id: number
+          image_url: string | null
+          show_timestamp: boolean
+          slot: string
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          color?: number | null
+          content?: string | null
+          description?: string | null
+          enabled?: boolean
+          fields?: Json
+          footer_text?: string | null
+          guild_id: string
+          id?: number
+          image_url?: string | null
+          show_timestamp?: boolean
+          slot: string
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: number | null
+          content?: string | null
+          description?: string | null
+          enabled?: boolean
+          fields?: Json
+          footer_text?: string | null
+          guild_id?: string
+          id?: number
+          image_url?: string | null
+          show_timestamp?: boolean
+          slot?: string
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       family_categories: {
         Row: {
           created_at: string
