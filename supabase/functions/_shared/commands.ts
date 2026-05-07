@@ -290,4 +290,9 @@ export const COMMANDS: any[] = [
       { type: BOOLEAN, name: "reset", description: "Reset all customization to defaults" },
     ],
   },
+  {
+    name: "embed_editor",
+    description: "Open the web-based embed builder to customize bot messages",
+    default_member_permissions: ADMIN_ONLY,
+  },
 ];
