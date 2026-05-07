@@ -10,6 +10,7 @@ import ClanLeaderboard from "./pages/ClanLeaderboard";
 import Blacklist from "./pages/Blacklist";
 import Whitelist from "./pages/Whitelist";
 import PlayerHistory from "./pages/PlayerHistory";
+import EmbedEditor from "./pages/EmbedEditor";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/blacklist" element={<Blacklist />} />
             <Route path="/whitelist" element={<Whitelist />} />
             <Route path="/player" element={<PlayerHistory />} />
+            <Route path="/embeds" element={<EmbedEditor />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
