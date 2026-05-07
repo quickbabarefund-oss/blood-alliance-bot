@@ -1,6 +1,7 @@
 // Family Clan Dashboard helpers
 import { adminClient } from "./leaderboard.ts";
 import { fetchClan, normalizeTag, type CoCClan } from "./coc.ts";
+import { applyTemplate } from "./embed_templates.ts";
 
 const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const DEFAULT_COLOR = 0x5865F2;
@@ -31,7 +32,6 @@ export async function loadFamily(guildId: string) {
   return { categories: (cats ?? []) as FamilyCategoryRow[], clans: (clans ?? []) as FamilyClanRow[] };
 }
 
-// Fetch & cache clan name (best-effort; fall back to existing/empty)
 export async function refreshClanName(guildId: string, clanTag: string): Promise<string> {
   const tag = normalizeTag(clanTag);
   try {
@@ -52,7 +52,6 @@ function formatLine(tpl: string, vars: Record<string, string | number>) {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
 }
 
-// Build the dashboard summary embed using the saved customization
 export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboardCfg | null): Promise<any> {
   const sb = adminClient();
   if (!cfg) {
@@ -98,7 +97,7 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
     });
   }
 
-  const embed: any = {
+  let embed: any = {
     title: c.title || "🏛️ Family Clan Dashboard",
     color: c.color ?? DEFAULT_COLOR,
     fields,
@@ -109,10 +108,12 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
   if (c.footer_text) embed.footer = { text: c.footer_text };
   if (c.show_timestamp) embed.timestamp = new Date().toISOString();
 
-  return { embeds: [embed], components, allowed_mentions: { parse: [] } };
+  // Apply user-overridden template (from web UI builder), preserving fields
+  const tplResult = await applyTemplate(guildId, "family_dashboard", embed, { keepFields: true });
+  return { content: tplResult.content ?? undefined, embeds: [tplResult.embed], components, allowed_mentions: { parse: [] } };
 }
 
-// Build the per-clan detail embed (live from CoC API)
+// Build per-clan detail embed (live from CoC API). Mentions linked Discord users when known.
 export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
   let clan: CoCClan | null = null;
   try { clan = await fetchClan(clanTag); }
@@ -126,6 +127,21 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
   const elders = members.filter((m) => m.role === "admin").length;
   const memberCount = members.length || c.members || 0;
 
+  // Bulk-lookup linked discord users for leader + co-leaders
+  const lookupTags = [leader, ...coLeaders].filter(Boolean).map((m: any) => m.tag);
+  const linkMap = new Map<string, string>();
+  if (lookupTags.length) {
+    const sb = adminClient();
+    const { data } = await sb.from("coc_links").select("player_tag,user_id").in("player_tag", lookupTags);
+    for (const r of (data ?? []) as { player_tag: string; user_id: string }[]) {
+      if (!linkMap.has(r.player_tag)) linkMap.set(r.player_tag, r.user_id);
+    }
+  }
+  const renderMember = (m: any) => {
+    const uid = linkMap.get(m.tag);
+    return uid ? `**${m.name}** <@${uid}>` : `**${m.name}** \`${m.tag}\``;
+  };
+
   const fields: any[] = [
     { name: "🏷️ Tag", value: `\`${c.tag ?? clanTag}\``, inline: true },
     { name: "👥 Members", value: `${memberCount}/50`, inline: true },
@@ -137,19 +153,19 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
 
   fields.push({
     name: "👑 Leader",
-    value: leader ? `**${leader.name}** \`${leader.tag}\`` : "_Unknown_",
+    value: leader ? renderMember(leader) : "_Unknown_",
     inline: false,
   });
   fields.push({
     name: `🥈 Co-Leaders — ${coLeaders.length}`,
     value: coLeaders.length
-      ? coLeaders.slice(0, 10).map((m) => `• **${m.name}** \`${m.tag}\``).join("\n")
+      ? coLeaders.slice(0, 10).map((m) => `• ${renderMember(m)}`).join("\n")
       : "_None_",
     inline: false,
   });
   fields.push({ name: "🎖️ Elders", value: String(elders), inline: true });
 
-  const embed = {
+  const embed: any = {
     title: `🏰 ${c.name ?? clanTag}`,
     description: c.description ? String(c.description).slice(0, 300) : undefined,
     color: DEFAULT_COLOR,
@@ -158,6 +174,7 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
     footer: { text: "Live from Clash of Clans" },
     timestamp: new Date().toISOString(),
   };
+  // Don't ping users — display only
   return { embeds: [embed], flags: 64, allowed_mentions: { parse: [] } };
 }
 
