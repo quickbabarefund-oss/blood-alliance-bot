@@ -524,7 +524,7 @@ async function handleWarResendResult(interaction: any) {
   const decision = (war.decision ?? result) as "win" | "lose";
   const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
 
-  const breaks = evaluateRules({ decision, endTime, ourMembers });
+  const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers });
   await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
   if (breaks.length) {
     await sb.from("war_rule_breaks").insert(breaks.map((b) => ({
