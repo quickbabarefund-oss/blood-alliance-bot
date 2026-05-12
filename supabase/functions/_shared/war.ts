@@ -315,7 +315,7 @@ export async function buildResultEmbeds(opts: {
   warRow: any;
   breaks: RuleBreak[];
   ourMembers: WarMember[];
-}): Promise<{ embeds: any[]; txt: string }> {
+}): Promise<{ embeds: any[]; txt: string; content?: string }> {
   const w = opts.warRow;
   const violators = new Set(opts.breaks.map((b) => b.player_tag));
   const compliantCount = opts.ourMembers.length - violators.size;
@@ -323,7 +323,7 @@ export async function buildResultEmbeds(opts: {
   const noEmoji = "<a:cross:1477055818229878915>";
   const allOk = violators.size === 0;
 
-  const page1 = {
+  const page1: any = {
     title: `${w.clan_name ?? w.clan_tag} vs ${w.opponent_name ?? w.opponent_tag} — Final Result`,
     description: `[${w.clan_name ?? w.clan_tag} (\`${w.clan_tag}\`)](${clanProfileLink(w.clan_tag)}) **VS** [${w.opponent_name ?? w.opponent_tag} (\`${w.opponent_tag}\`)](${clanProfileLink(w.opponent_tag)})`,
     color: w.result === "win" ? 0x57F287 : w.result === "lose" ? 0xED4245 : 0xF1B93B,
