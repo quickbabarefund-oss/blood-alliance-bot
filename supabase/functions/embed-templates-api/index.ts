@@ -3,7 +3,7 @@
 // POST { token, slot, ...embedFields } -> upsert
 import { corsHeaders } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/leaderboard.ts";
-import { EMBED_SLOTS, SLOT_PLACEHOLDERS } from "../_shared/embed_templates.ts";
+import { EMBED_SLOTS, SLOT_PLACEHOLDERS, SLOT_PLACEHOLDER_DESCRIPTIONS } from "../_shared/embed_templates.ts";
 
 async function resolveToken(token: string): Promise<string | null> {
   if (!token || token.length < 10) return null;
