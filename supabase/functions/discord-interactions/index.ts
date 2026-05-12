@@ -1047,6 +1047,7 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   clan_members: buildClanMembers,
   cwl: buildCwl,
   capital_raids: buildCapitalRaids,
+  compo: buildCompo,
 };
 
 async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
