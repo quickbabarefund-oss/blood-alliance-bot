@@ -1039,6 +1039,50 @@ async function handleFamilyCustomize(interaction: any): Promise<Response> {
 }
 
 // --- Generic dispatcher for the read-only CoC commands ---
+const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targetUser?: string; caller: string }) => Promise<any>> = {
+  player_info: buildPlayerInfo,
+  clan_info: buildClanInfo,
+  current_war: buildCurrentWar,
+  war_log: buildWarLog,
+  clan_members: buildClanMembers,
+  cwl: buildCwl,
+  capital_raids: buildCapitalRaids,
+};
+
+async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
+  const sb = adminClient();
+  const { data: links } = await sb.from("coc_links").select("player_tag").eq("user_id", userId);
+  const tags = (links ?? []).map((l: any) => l.player_tag);
+  if (!tags.length) return [];
+  const { data: players } = await sb.from("players").select("tag,name").in("tag", tags);
+  const nameMap = new Map((players ?? []).map((p: any) => [p.tag, p.name]));
+  return tags.map((t) => ({ player_tag: t, name: nameMap.get(t) ?? t }));
+}
+
+function accountPickerPayload(cmdName: string, targetUser: string | undefined, links: Array<{ player_tag: string; name: string }>, forUserId: string) {
+  const options = links.slice(0, 25).map((l) => ({
+    label: (l.name || l.player_tag).slice(0, 100),
+    value: l.player_tag,
+    description: l.player_tag.slice(0, 100),
+  }));
+  const subjectLabel = targetUser ? `<@${targetUser}>` : "you";
+  return {
+    content: `🔗 ${subjectLabel} ${targetUser ? "has" : "have"} multiple linked accounts. Pick one to use for **/${cmdName}**:`,
+    components: [{
+      type: 1,
+      components: [{
+        type: 3,
+        custom_id: `coc:pick:${cmdName}:${targetUser ?? ""}:${forUserId}`,
+        placeholder: "Select an account…",
+        options,
+        min_values: 1,
+        max_values: 1,
+      }],
+    }],
+    allowed_mentions: { parse: [] },
+  };
+}
+
 async function handleCocCmd(
   interaction: any,
   builder: (guildId: string, args: { tag?: string; targetUser?: string; caller: string }) => Promise<any>,
@@ -1050,6 +1094,20 @@ async function handleCocCmd(
   const caller = callerUserId(interaction);
   const appId = interaction.application_id;
   const token = interaction.token;
+  const cmdName = interaction.data.name;
+
+  // If no explicit tag, check linked accounts for target/self.
+  if (!tag) {
+    const uid = targetUser ?? caller;
+    const links = await fetchUserLinks(uid);
+    if (links.length > 1) {
+      // Show ephemeral picker; only the caller can use it.
+      return new Response(JSON.stringify({
+        type: RESP_CHANNEL_MSG,
+        data: { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 },
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+  }
 
   (async () => {
     try {
@@ -1134,6 +1192,45 @@ Deno.serve(async (req) => {
         const tag = interaction.data?.values?.[0];
         const data = await buildClanDetailEmbed(tag, guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data: { ...data, flags: 64 } }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (cid.startsWith("coc:pick:")) {
+        // coc:pick:<cmdName>:<targetUserOrEmpty>:<forUserId>
+        const parts = cid.split(":");
+        const cmdName = parts[2];
+        const targetUser = parts[3] || undefined;
+        const forUserId = parts[4];
+        const caller = callerUserId(interaction);
+        if (forUserId && caller !== forUserId) {
+          return new Response(JSON.stringify({
+            type: RESP_CHANNEL_MSG,
+            data: { content: "⛔ Only the user who ran the command can pick.", flags: 64 },
+          }), { headers: { "Content-Type": "application/json" } });
+        }
+        const tag = interaction.data?.values?.[0];
+        const builder = COC_BUILDERS[cmdName];
+        if (!builder || !tag) {
+          return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+        }
+        const guildId = interaction.guild_id ?? "";
+        const appId = interaction.application_id;
+        const token = interaction.token;
+        (async () => {
+          try {
+            const data = await builder(guildId, { tag, targetUser, caller });
+            // Replace the ephemeral picker with the result (still ephemeral to caller).
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/messages/@original`, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: "", components: [], ...data }),
+            });
+          } catch (e) {
+            console.error("coc pick failed", e);
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/messages/@original`, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, components: [], embeds: [] }),
+            });
+          }
+        })();
+        return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
