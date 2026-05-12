@@ -202,7 +202,7 @@ export async function buildClanDetailEmbed(clanTag: string, guildId?: string): P
       description: c.description ?? "",
     },
   });
-  return { embeds: [tplResult.embed], content: tplResult.content, flags: 64, allowed_mentions: { parse: [] } };
+  return { embeds: [tplResult.embed], content: tplResult.content, allowed_mentions: { parse: [] } };
 }
 
 // Persist dashboard message — create or edit
