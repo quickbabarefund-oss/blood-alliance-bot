@@ -68,6 +68,7 @@ export default function EmbedEditor() {
         if (!r.ok) throw new Error(j.error ?? r.statusText);
         setSlots(j.slots ?? []);
         setPlaceholders(j.placeholders ?? {});
+        setPlaceholderDescriptions(j.placeholder_descriptions ?? {});
         setGuildName(j.guild_name ?? null);
         const map: Record<string, Template> = {};
         for (const s of j.slots ?? []) {
