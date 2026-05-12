@@ -179,9 +179,9 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
         result, our_stars: ourStars, opp_stars: oppStars,
         our_destruction: ourDes, opp_destruction: oppDes,
       };
-      const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
+      const { embeds, txt, content } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
       const filename = `war-${(war.clan_tag).replace("#", "")}-vs-${(war.opponent_tag).replace("#", "")}-${startTime.toISOString().slice(0, 10)}.txt`;
-      const msgId = await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
+      const msgId = await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds, content });
 
       await sb.from("wars").update({
         result, our_stars: ourStars, opp_stars: oppStars,
