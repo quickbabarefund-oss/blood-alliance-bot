@@ -1131,7 +1131,7 @@ Deno.serve(async (req) => {
       }
       if (cid.startsWith("fam:view:")) {
         const tag = interaction.data?.values?.[0];
-        const data = await buildClanDetailEmbed(tag);
+        const data = await buildClanDetailEmbed(tag, guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
