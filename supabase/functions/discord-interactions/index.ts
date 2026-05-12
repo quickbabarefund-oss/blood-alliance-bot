@@ -14,7 +14,7 @@ import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from 
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
-  buildClanMembers, buildCwl, buildCapitalRaids,
+  buildClanMembers, buildCwl, buildCapitalRaids, fetchLiveUserLinks,
 } from "../_shared/coc_commands.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
@@ -1050,13 +1050,17 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
 };
 
 async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
-  const sb = adminClient();
-  const { data: links } = await sb.from("coc_links").select("player_tag").eq("user_id", userId);
-  const tags = (links ?? []).map((l: any) => l.player_tag);
-  if (!tags.length) return [];
-  const { data: players } = await sb.from("players").select("tag,name").in("tag", tags);
-  const nameMap = new Map((players ?? []).map((p: any) => [p.tag, p.name]));
-  return tags.map((t) => ({ player_tag: t, name: nameMap.get(t) ?? t }));
+  const live = await fetchLiveUserLinks(userId);
+  if (!live.length) return [];
+  // Enrich missing names from local players table.
+  const missing = live.filter((l) => !l.name).map((l) => l.tag);
+  let nameMap = new Map<string, string>(live.filter((l) => l.name).map((l) => [l.tag, l.name!]));
+  if (missing.length) {
+    const sb = adminClient();
+    const { data: players } = await sb.from("players").select("tag,name").in("tag", missing);
+    for (const p of (players ?? []) as any[]) nameMap.set(p.tag, p.name);
+  }
+  return live.map((l) => ({ player_tag: l.tag, name: nameMap.get(l.tag) ?? l.tag }));
 }
 
 function accountPickerPayload(cmdName: string, targetUser: string | undefined, links: Array<{ player_tag: string; name: string }>, forUserId: string) {

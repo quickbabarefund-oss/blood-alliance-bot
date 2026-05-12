@@ -18,7 +18,25 @@ function ccPlayerLink(tag: string) { return `https://cc.fwafarm.com/cc_n/member.
 function ccClanLink(tag: string) { return `https://cc.fwafarm.com/cc_n/clan.php?tag=${tagNoHash(tag)}`; }
 function playerProfileLink(tag: string) { return `https://link.clashofclans.com/?action=OpenPlayerProfile&tag=${encodeURIComponent(tag.startsWith("#") ? tag : `#${tag}`)}`; }
 
-// Resolve a tag from explicit arg, or from the user's coc_links (player or clan).
+// Live-fetch all player tags linked to a Discord user from the CC proxy.
+// Falls back to the cached coc_links table if the proxy is unreachable.
+export async function fetchLiveUserLinks(userId: string): Promise<Array<{ tag: string; name?: string }>> {
+  try {
+    const res: any = await postCoc({ action: "get", type: "player", filters: { user_id: String(userId) } });
+    const items: any[] = Array.isArray(res) ? res : (res?.items ?? res?.links ?? (res ? [res] : []));
+    const out: Array<{ tag: string; name?: string }> = [];
+    for (const it of items) {
+      const t = it?.tag ?? it?.player_tag;
+      if (t) out.push({ tag: normalizeTag(t), name: it?.name ?? it?.player_name });
+    }
+    if (out.length) return out;
+  } catch (_e) { /* fall through to cache */ }
+  const sb = adminClient();
+  const { data } = await sb.from("coc_links").select("player_tag").eq("user_id", String(userId));
+  return (data ?? []).map((r: any) => ({ tag: normalizeTag(r.player_tag) }));
+}
+
+// Resolve a tag from explicit arg, or from the user's links (live from proxy).
 async function resolveTag(opts: {
   explicit?: string;
   userId?: string;
@@ -27,9 +45,8 @@ async function resolveTag(opts: {
   if (opts.explicit) return normalizeTag(opts.explicit);
   const uid = opts.userId ?? opts.fallbackUserId;
   if (!uid) return null;
-  const sb = adminClient();
-  const { data } = await sb.from("coc_links").select("player_tag").eq("user_id", uid).limit(1);
-  return data?.[0]?.player_tag ? normalizeTag(data[0].player_tag) : null;
+  const links = await fetchLiveUserLinks(uid);
+  return links[0]?.tag ?? null;
 }
 
 function errEmbed(msg: string) {
