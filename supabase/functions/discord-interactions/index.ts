@@ -1132,17 +1132,8 @@ Deno.serve(async (req) => {
       if (cid.startsWith("fam:view:")) {
         const guildId = interaction.guild_id ?? "";
         const tag = interaction.data?.values?.[0];
-        const channelId = interaction.channel_id;
-        (async () => {
-          try {
-            const data = await buildClanDetailEmbed(tag, guildId);
-            const { flags: _flags, ...channelPayload } = data;
-            await createMessage(channelId, channelPayload);
-          } catch (e) {
-            console.error("family clan detail post failed", e);
-          }
-        })();
-        return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+        const data = await buildClanDetailEmbed(tag, guildId);
+        return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data: { ...data, flags: 64 } }), { headers: { "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
