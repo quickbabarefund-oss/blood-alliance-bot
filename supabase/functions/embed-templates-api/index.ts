@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
       for (const r of data ?? []) map[(r as any).slot] = r;
       // Also include guild name if we have one
       const { data: g } = await sb.from("guilds").select("name").eq("guild_id", guildId).maybeSingle();
-      return json({ guild_id: guildId, guild_name: g?.name ?? null, slots: EMBED_SLOTS, templates: map });
+      return json({ guild_id: guildId, guild_name: g?.name ?? null, slots: EMBED_SLOTS, placeholders: SLOT_PLACEHOLDERS, templates: map });
     }
 
     if (req.method === "POST") {
