@@ -14,7 +14,7 @@ import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from 
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
-  buildClanMembers, buildCwl, buildCapitalRaids,
+  buildClanMembers, buildCwl, buildCapitalRaids, fetchLiveUserLinks,
 } from "../_shared/coc_commands.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
