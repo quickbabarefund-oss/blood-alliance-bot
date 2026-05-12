@@ -39,12 +39,20 @@ function hexToInt(h: string): number {
   return parseInt(/^[0-9a-f]{6}$/i.test(m) ? m : "5865f2", 16);
 }
 
+const EMOJI_PALETTE = [
+  "🏰","🛡️","⚔️","🏆","🔥","👑","🥈","🎖️","🏷️","👥","🎮","🍫",
+  "⭐","💥","🎯","📊","📈","📉","🟢","🔴","🟡","✅","❌","⏰",
+  "🕒","🗡️","🪖","💀","☠️","🧱","💣","⚡","✨","💎","📜","📣",
+  "📢","🔔","❤️","💙","💚","🎁","📥","🦸","🌍","ℹ️","🏯","🥇",
+];
+
 export default function EmbedEditor() {
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotMeta[]>([]);
+  const [placeholders, setPlaceholders] = useState<Record<string, string[]>>({});
   const [guildName, setGuildName] = useState<string | null>(null);
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
@@ -58,6 +66,7 @@ export default function EmbedEditor() {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? r.statusText);
         setSlots(j.slots ?? []);
+        setPlaceholders(j.placeholders ?? {});
         setGuildName(j.guild_name ?? null);
         const map: Record<string, Template> = {};
         for (const s of j.slots ?? []) {
