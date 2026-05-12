@@ -69,7 +69,7 @@ export async function buildPlayerInfo(guildId: string, args: { tag?: string; tar
     { name: "📥 Received", value: String(p.donationsReceived ?? 0), inline: true },
     { name: "🏰 Clan", value: p.clan ? `**${p.clan.name}** \`${p.clan.tag}\` (${p.role ?? "—"})` : "_No clan_", inline: false },
     { name: "🦸 Heroes", value: heroes, inline: false },
-    { name: "🔗 Links", value: `[ClashChamps](${ccPlayerLink(tag)}) • [In-game](${playerProfileLink(tag)})`, inline: false },
+    { name: "🔗 Links", value: `[ChocolateClash](${ccPlayerLink(tag)}) • [In-game](${playerProfileLink(tag)})`, inline: false },
   ];
   const base = {
     title: `${p.name ?? tag}`,
@@ -101,7 +101,7 @@ export async function buildClanInfo(guildId: string, args: { tag?: string; targe
     { name: "⚔️ War Record", value: `W **${c.warWins ?? 0}** • T ${c.warTies ?? 0} • L ${c.warLosses ?? 0}`, inline: true },
     { name: "🌍 Location", value: c.location?.name ?? "—", inline: true },
     { name: "📜 Type", value: c.type ?? "—", inline: true },
-    { name: "🔗 Links", value: `[ClashChamps](${ccClanLink(tag)}) • [In-game](${clanProfileLink(tag)}) ${fwa ? "• 🛡️ **FWA**" : ""}`, inline: false },
+    { name: "🔗 Links", value: `[ChocolateClash](${ccClanLink(tag)}) • [In-game](${clanProfileLink(tag)}) ${fwa ? "• 🛡️ **FWA**" : ""}`, inline: false },
   ];
   if (c.description) fields.push({ name: "ℹ️ Description", value: String(c.description).slice(0, 500), inline: false });
   const base = {
@@ -140,7 +140,7 @@ export async function buildCurrentWar(guildId: string, args: { tag?: string; tar
     { name: "⭐ Stars", value: `**${ours.stars ?? 0}** vs ${opp.stars ?? 0}`, inline: true },
     { name: "💥 Destruction", value: `**${(ours.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%** vs ${(opp.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%`, inline: true },
     { name: "🗡️ Attacks Used", value: `${ours.attacks ?? 0}/${(cw.teamSize ?? 0) * 2}`, inline: true },
-    { name: "🔗 Links", value: `[Us — ClashChamps](${ccClanLink(tag)}) • [Opponent — ClashChamps](${ccClanLink(opp.tag)})`, inline: false },
+    { name: "🔗 Links", value: `[Us — ChocolateClash](${ccClanLink(tag)}) • [Opponent — ChocolateClash](${ccClanLink(opp.tag)})`, inline: false },
   ];
   const base = {
     title: `${ours.name} vs ${opp.name}`,
@@ -182,7 +182,7 @@ export async function buildWarLog(guildId: string, args: { tag?: string; targetU
     color: COLOR,
     fields: [
       { name: "Record", value: `🟢 ${wins}  🔴 ${losses}  🟡 ${ties}`, inline: true },
-      { name: "🔗 ClashChamps", value: `[Open](${ccClanLink(tag)})`, inline: true },
+      { name: "🔗 ChocolateClash", value: `[Open](${ccClanLink(tag)})`, inline: true },
     ],
   };
   return await send(guildId, "war_log", base, { tag, wins, losses });
@@ -210,7 +210,7 @@ export async function buildClanMembers(guildId: string, args: { tag?: string; ta
     description: lines.join("\n").slice(0, 4000),
     color: COLOR,
     thumbnail: c.badgeUrls?.medium ? { url: c.badgeUrls.medium } : undefined,
-    fields: [{ name: "🔗 ClashChamps", value: `[Open](${ccClanLink(tag)})`, inline: true }],
+    fields: [{ name: "🔗 ChocolateClash", value: `[Open](${ccClanLink(tag)})`, inline: true }],
     footer: { text: members.length > 25 ? `Showing top 25 of ${members.length} by donations` : "Sorted by donations" },
   };
   return await send(guildId, "clan_members", base, { tag, name: c.name });
@@ -240,7 +240,7 @@ export async function buildCwl(guildId: string, args: { tag?: string; targetUser
     color: COLOR,
     fields: [
       { name: "Group", value: lines, inline: false },
-      { name: "🔗 ClashChamps", value: `[Open](${ccClanLink(tag)})`, inline: true },
+      { name: "🔗 ChocolateClash", value: `[Open](${ccClanLink(tag)})`, inline: true },
     ],
   };
   return await send(guildId, "cwl", base, { tag, season: g.season });
@@ -271,7 +271,7 @@ export async function buildCapitalRaids(guildId: string, args: { tag?: string; t
     { name: "🏆 Offensive Reward", value: String(last.offensiveReward ?? 0), inline: true },
     { name: "🛡️ Defensive Reward", value: String(last.defensiveReward ?? 0), inline: true },
     { name: "🥇 Top Raiders", value: topLines, inline: false },
-    { name: "🔗 ClashChamps", value: `[Open](${ccClanLink(tag)})`, inline: true },
+    { name: "🔗 ChocolateClash", value: `[Open](${ccClanLink(tag)})`, inline: true },
   ];
   const base = { title: "🏯 Capital Raid Weekend", color: COLOR, fields };
   return await send(guildId, "capital_raids", base, { tag, loot: last.capitalTotalLoot });

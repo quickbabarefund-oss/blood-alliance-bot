@@ -305,7 +305,7 @@ export const COMMANDS: any[] = [
   },
   {
     name: "clan_info",
-    description: "Show level, league, members, war record and ClashChamps link for a clan",
+    description: "Show level, league, members, war record and ChocolateClash link for a clan",
     options: [
       { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
