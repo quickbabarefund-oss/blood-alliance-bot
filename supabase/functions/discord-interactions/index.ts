@@ -1283,6 +1283,7 @@ Deno.serve(async (req) => {
         case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
         case "cwl": return await handleCocCmd(interaction, buildCwl);
         case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
+        case "compo": return await handleCocCmd(interaction, buildCompo);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
