@@ -293,3 +293,48 @@ export async function buildCapitalRaids(guildId: string, args: { tag?: string; t
   const base = { title: "🏯 Capital Raid Weekend", color: COLOR, fields };
   return await send(guildId, "capital_raids", base, { tag, loot: last.capitalTotalLoot });
 }
+
+// ---------- /compo ----------
+export async function buildCompo(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  let c: any;
+  try { c = await fetchClan(tag); } catch (e) {
+    return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
+  }
+  const thMap = await loadThEmojis();
+  const members: any[] = c.memberList ?? [];
+  if (!members.length) {
+    return await send(guildId, "compo", { title: `🏰 ${c.name ?? tag}`, description: "No members.", color: COLOR_GOLD }, { tag });
+  }
+  // Count by TH level
+  const counts = new Map<number, number>();
+  for (const m of members) {
+    const th = m.townHallLevel ?? 0;
+    counts.set(th, (counts.get(th) ?? 0) + 1);
+  }
+  const sorted = Array.from(counts.entries()).sort((a, b) => b[0] - a[0]);
+  const total = members.length;
+  const maxCount = Math.max(...counts.values());
+  const lines = sorted.map(([th, n]) => {
+    const pct = ((n / total) * 100).toFixed(1);
+    const barLen = Math.max(1, Math.round((n / maxCount) * 12));
+    const bar = "█".repeat(barLen) + "░".repeat(12 - barLen);
+    return `${thEmoji(thMap, th)} **TH${th}** \`${bar}\` **${n}** (${pct}%)`;
+  });
+  const avgTh = (members.reduce((s, m) => s + (m.townHallLevel ?? 0), 0) / total).toFixed(2);
+  const base = {
+    title: `🏰 ${c.name ?? tag} — Composition`,
+    description: lines.join("\n"),
+    color: COLOR,
+    thumbnail: c.badgeUrls?.medium ? { url: c.badgeUrls.medium } : undefined,
+    fields: [
+      { name: "👥 Members", value: `${total}/50`, inline: true },
+      { name: "📊 Avg TH", value: avgTh, inline: true },
+      { name: "🏆 Top TH", value: `TH${sorted[0]?.[0] ?? "—"}`, inline: true },
+      { name: "🔗 Links", value: `[ChocolateClash](${ccClanLink(tag)}) • [In-game](${clanProfileLink(tag)})`, inline: false },
+    ],
+    footer: { text: "Live from Clash of Clans" },
+  };
+  return await send(guildId, "compo", base, { tag, name: c.name, members: total, avg_th: avgTh });
+}
