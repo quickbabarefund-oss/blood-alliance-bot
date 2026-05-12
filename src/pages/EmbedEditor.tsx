@@ -162,7 +162,7 @@ export default function EmbedEditor() {
             </div>
           </div>
 
-          <PlaceholderBar vars={placeholders[active] ?? []} />
+          <PlaceholderBar vars={placeholders[active] ?? []} descriptions={placeholderDescriptions[active] ?? {}} />
           <EmojiBar />
 
           <Field label="Title">
