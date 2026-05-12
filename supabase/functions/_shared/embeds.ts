@@ -91,8 +91,20 @@ export async function buildClanEmbed(guildId: string, clanTag: string, page = 0,
   };
   if (c.badge_url) embed.thumbnail = { url: c.badge_url };
 
+  let outEmbed: any = embed;
+  let content: string | undefined;
+  try {
+    const { applyTemplate } = await import("./embed_templates.ts");
+    const r = await applyTemplate(guildId, "clan_leaderboard", embed, {
+      vars: { clan: c.name || c.tag, tag: c.tag, month: mk },
+      keepFields: true,
+    });
+    outEmbed = r.embed; content = r.content;
+  } catch (e) { console.error("template apply (clan_leaderboard)", e); }
+
   return {
-    embeds: [embed],
+    embeds: [outEmbed],
+    content,
     components: navButtons(`lb:clan:${guildId}:${clanTag}`, safePage, totalPages),
   };
 }
