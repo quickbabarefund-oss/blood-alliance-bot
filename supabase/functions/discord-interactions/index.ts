@@ -12,6 +12,10 @@ import { syncGuildCommands, createMessageWithFile } from "../_shared/discord.ts"
 import { COMMANDS } from "../_shared/commands.ts";
 import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
+import {
+  buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
+  buildClanMembers, buildCwl, buildCapitalRaids,
+} from "../_shared/coc_commands.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -1143,6 +1147,13 @@ Deno.serve(async (req) => {
         case "family_customize": return await handleFamilyCustomize(interaction);
         case "embed_editor": return await handleEmbedEditor(interaction);
         case "help": return handleHelp(interaction);
+        case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
+        case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
+        case "current_war": return await handleCocCmd(interaction, buildCurrentWar);
+        case "war_log": return await handleCocCmd(interaction, buildWarLog);
+        case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
+        case "cwl": return await handleCocCmd(interaction, buildCwl);
+        case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
