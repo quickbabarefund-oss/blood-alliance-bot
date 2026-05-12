@@ -1130,6 +1130,7 @@ Deno.serve(async (req) => {
         return await handleWarDecide(interaction);
       }
       if (cid.startsWith("fam:view:")) {
+        const guildId = interaction.guild_id ?? "";
         const tag = interaction.data?.values?.[0];
         const data = await buildClanDetailEmbed(tag, guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
