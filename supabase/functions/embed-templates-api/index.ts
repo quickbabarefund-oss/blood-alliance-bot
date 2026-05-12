@@ -3,7 +3,7 @@
 // POST { token, slot, ...embedFields } -> upsert
 import { corsHeaders } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/leaderboard.ts";
-import { EMBED_SLOTS, SLOT_PLACEHOLDERS } from "../_shared/embed_templates.ts";
+import { EMBED_SLOTS, SLOT_PLACEHOLDERS, SLOT_PLACEHOLDER_DESCRIPTIONS } from "../_shared/embed_templates.ts";
 
 async function resolveToken(token: string): Promise<string | null> {
   if (!token || token.length < 10) return null;
@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
       for (const r of data ?? []) map[(r as any).slot] = r;
       // Also include guild name if we have one
       const { data: g } = await sb.from("guilds").select("name").eq("guild_id", guildId).maybeSingle();
-      return json({ guild_id: guildId, guild_name: g?.name ?? null, slots: EMBED_SLOTS, placeholders: SLOT_PLACEHOLDERS, templates: map });
+      return json({ guild_id: guildId, guild_name: g?.name ?? null, slots: EMBED_SLOTS, placeholders: SLOT_PLACEHOLDERS, placeholder_descriptions: SLOT_PLACEHOLDER_DESCRIPTIONS, templates: map });
     }
 
     if (req.method === "POST") {

@@ -53,6 +53,7 @@ export default function EmbedEditor() {
   const [error, setError] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotMeta[]>([]);
   const [placeholders, setPlaceholders] = useState<Record<string, string[]>>({});
+  const [placeholderDescriptions, setPlaceholderDescriptions] = useState<Record<string, Record<string, string>>>({});
   const [guildName, setGuildName] = useState<string | null>(null);
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
@@ -67,6 +68,7 @@ export default function EmbedEditor() {
         if (!r.ok) throw new Error(j.error ?? r.statusText);
         setSlots(j.slots ?? []);
         setPlaceholders(j.placeholders ?? {});
+        setPlaceholderDescriptions(j.placeholder_descriptions ?? {});
         setGuildName(j.guild_name ?? null);
         const map: Record<string, Template> = {};
         for (const s of j.slots ?? []) {
@@ -160,7 +162,7 @@ export default function EmbedEditor() {
             </div>
           </div>
 
-          <PlaceholderBar vars={placeholders[active] ?? []} />
+          <PlaceholderBar vars={placeholders[active] ?? []} descriptions={placeholderDescriptions[active] ?? {}} />
           <EmojiBar />
 
           <Field label="Title">
@@ -260,7 +262,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function PlaceholderBar({ vars }: { vars: string[] }) {
+function PlaceholderBar({ vars, descriptions }: { vars: string[]; descriptions: Record<string, string> }) {
   if (!vars.length) {
     return (
       <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
@@ -283,6 +285,16 @@ function PlaceholderBar({ vars }: { vars: string[] }) {
           </button>
         ))}
       </div>
+      {Object.keys(descriptions).length > 0 && (
+        <div className="mt-2.5 space-y-1 border-t border-border pt-2">
+          {vars.map((v) => descriptions[v] && (
+            <div key={v} className="flex items-start gap-2 text-xs">
+              <code className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-gold">{`{${v}}`}</code>
+              <span className="text-muted-foreground">{descriptions[v]}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
