@@ -260,6 +260,53 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function PlaceholderBar({ vars }: { vars: string[] }) {
+  if (!vars.length) {
+    return (
+      <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+        No variables for this slot — text is used as-is.
+      </div>
+    );
+  }
+  const copy = (v: string) => {
+    navigator.clipboard.writeText(`{${v}}`);
+    toast({ title: "Copied", description: `{${v}} → clipboard. Paste into any field.` });
+  };
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-muted-foreground">Available placeholders (click to copy)</div>
+      <div className="flex flex-wrap gap-1.5">
+        {vars.map((v) => (
+          <button key={v} type="button" onClick={() => copy(v)}
+            className="rounded bg-secondary px-2 py-0.5 text-xs font-mono text-gold hover:bg-secondary/70">
+            {`{${v}}`}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmojiBar() {
+  const copy = (e: string) => {
+    navigator.clipboard.writeText(e);
+    toast({ title: "Emoji copied", description: `${e} → clipboard.` });
+  };
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-muted-foreground">Emoji palette (click to copy)</div>
+      <div className="flex flex-wrap gap-1">
+        {EMOJI_PALETTE.map((e) => (
+          <button key={e} type="button" onClick={() => copy(e)}
+            className="rounded px-1.5 py-0.5 text-lg hover:bg-secondary">
+            {e}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DiscordEmbedPreview({ tpl }: { tpl: Template }) {
   const color = useMemo(() => colorToHex(tpl.color), [tpl.color]);
   if (!tpl.enabled) {
