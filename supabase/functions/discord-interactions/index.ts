@@ -14,7 +14,7 @@ import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from 
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
-  buildClanMembers, buildCwl, buildCapitalRaids, fetchLiveUserLinks,
+  buildClanMembers, buildCwl, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
 } from "../_shared/coc_commands.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
@@ -1047,6 +1047,7 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   clan_members: buildClanMembers,
   cwl: buildCwl,
   capital_raids: buildCapitalRaids,
+  compo: buildCompo,
 };
 
 async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
@@ -1282,6 +1283,7 @@ Deno.serve(async (req) => {
         case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
         case "cwl": return await handleCocCmd(interaction, buildCwl);
         case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
+        case "compo": return await handleCocCmd(interaction, buildCompo);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
