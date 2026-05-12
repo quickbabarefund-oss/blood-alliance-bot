@@ -160,6 +160,9 @@ export default function EmbedEditor() {
             </div>
           </div>
 
+          <PlaceholderBar vars={placeholders[active] ?? []} />
+          <EmojiBar />
+
           <Field label="Title">
             <Input value={tpl.title ?? ""} onChange={(e) => update({ title: e.target.value })} />
           </Field>
