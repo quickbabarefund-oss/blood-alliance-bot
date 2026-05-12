@@ -161,6 +161,8 @@ export async function buildReminderPayload(opts: {
   emoji: string;
   war: any; // wars row
   current: CurrentWar;
+  slot?: "war_started" | "war_reminder";
+  minutes?: number;
 }): Promise<{ content: string; allowed_mentions: any }> {
   const thMap = await loadThEmojis();
   const sb = adminClient();
