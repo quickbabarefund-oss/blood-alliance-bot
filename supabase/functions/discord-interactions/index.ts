@@ -1193,6 +1193,45 @@ Deno.serve(async (req) => {
         const data = await buildClanDetailEmbed(tag, guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data: { ...data, flags: 64 } }), { headers: { "Content-Type": "application/json" } });
       }
+      if (cid.startsWith("coc:pick:")) {
+        // coc:pick:<cmdName>:<targetUserOrEmpty>:<forUserId>
+        const parts = cid.split(":");
+        const cmdName = parts[2];
+        const targetUser = parts[3] || undefined;
+        const forUserId = parts[4];
+        const caller = callerUserId(interaction);
+        if (forUserId && caller !== forUserId) {
+          return new Response(JSON.stringify({
+            type: RESP_CHANNEL_MSG,
+            data: { content: "⛔ Only the user who ran the command can pick.", flags: 64 },
+          }), { headers: { "Content-Type": "application/json" } });
+        }
+        const tag = interaction.data?.values?.[0];
+        const builder = COC_BUILDERS[cmdName];
+        if (!builder || !tag) {
+          return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+        }
+        const guildId = interaction.guild_id ?? "";
+        const appId = interaction.application_id;
+        const token = interaction.token;
+        (async () => {
+          try {
+            const data = await builder(guildId, { tag, targetUser, caller });
+            // Replace the ephemeral picker with the result (still ephemeral to caller).
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/messages/@original`, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: "", components: [], ...data }),
+            });
+          } catch (e) {
+            console.error("coc pick failed", e);
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/messages/@original`, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, components: [], embeds: [] }),
+            });
+          }
+        })();
+        return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
       console.error("component handler error", e);
