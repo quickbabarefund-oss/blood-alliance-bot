@@ -295,4 +295,60 @@ export const COMMANDS: any[] = [
     description: "Open the web-based embed builder to customize bot messages",
     default_member_permissions: ADMIN_ONLY,
   },
+  {
+    name: "player_info",
+    description: "Show TH, heroes, donations, war stars and more for a player",
+    options: [
+      { type: STRING, name: "tag", description: "Player tag (defaults to your linked tag)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked player tag)" },
+    ],
+  },
+  {
+    name: "clan_info",
+    description: "Show level, league, members, war record and ClashChamps link for a clan",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "current_war",
+    description: "Show the live current-war status for a clan",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "war_log",
+    description: "Show the last 10 regular wars for a clan",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "clan_members",
+    description: "Show clan members sorted by donations",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "cwl",
+    description: "Show current Clan War League status / round",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "capital_raids",
+    description: "Show the most recent Clan Capital raid weekend summary",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
 ];

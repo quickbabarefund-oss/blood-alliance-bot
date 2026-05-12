@@ -164,7 +164,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
 
       // Use decision (set by reps) or fall back to actual result
       const decision = (war.decision ?? result) as "win" | "lose";
-      const breaks = evaluateRules({ decision, endTime, ourMembers });
+      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers: cw.opponent.members ?? [] });
 
       // Persist breaks
       await sb.from("war_rule_breaks").delete().eq("war_id", war.id);

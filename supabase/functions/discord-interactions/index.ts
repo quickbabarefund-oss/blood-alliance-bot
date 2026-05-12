@@ -12,6 +12,10 @@ import { syncGuildCommands, createMessageWithFile } from "../_shared/discord.ts"
 import { COMMANDS } from "../_shared/commands.ts";
 import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
+import {
+  buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
+  buildClanMembers, buildCwl, buildCapitalRaids,
+} from "../_shared/coc_commands.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -524,7 +528,7 @@ async function handleWarResendResult(interaction: any) {
   const decision = (war.decision ?? result) as "win" | "lose";
   const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
 
-  const breaks = evaluateRules({ decision, endTime, ourMembers });
+  const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers });
   await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
   if (breaks.length) {
     await sb.from("war_rule_breaks").insert(breaks.map((b) => ({
@@ -1034,7 +1038,33 @@ async function handleFamilyCustomize(interaction: any): Promise<Response> {
   return reply(`✅ Dashboard updated: ${summary.join(", ") || "no changes"}.`);
 }
 
-// --- /embed_editor ---
+// --- Generic dispatcher for the read-only CoC commands ---
+async function handleCocCmd(
+  interaction: any,
+  builder: (guildId: string, args: { tag?: string; targetUser?: string; caller: string }) => Promise<any>,
+): Promise<Response> {
+  const guildId = interaction.guild_id ?? "";
+  const opts = interaction.data.options ?? [];
+  const tag = getOpt(opts, "tag");
+  const targetUser = getOpt(opts, "user");
+  const caller = callerUserId(interaction);
+  const appId = interaction.application_id;
+  const token = interaction.token;
+
+  (async () => {
+    try {
+      const data = await builder(guildId, { tag, targetUser, caller });
+      await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, flags: 0 }),
+      });
+    } catch (e) {
+      console.error("coc cmd failed", e);
+      await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(false);
+}
 const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://clan-loot-tracker.lovable.app";
 async function handleEmbedEditor(interaction: any): Promise<Response> {
   if (!((BigInt(interaction.member?.permissions ?? "0")) & 0x8n)) {
@@ -1143,6 +1173,13 @@ Deno.serve(async (req) => {
         case "family_customize": return await handleFamilyCustomize(interaction);
         case "embed_editor": return await handleEmbedEditor(interaction);
         case "help": return handleHelp(interaction);
+        case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
+        case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
+        case "current_war": return await handleCocCmd(interaction, buildCurrentWar);
+        case "war_log": return await handleCocCmd(interaction, buildWarLog);
+        case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
+        case "cwl": return await handleCocCmd(interaction, buildCwl);
+        case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {

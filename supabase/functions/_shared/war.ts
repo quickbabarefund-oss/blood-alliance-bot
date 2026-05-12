@@ -46,31 +46,35 @@ export function clanProfileLink(tag: string): string {
   return `https://link.clashofclans.com/?action=OpenClanProfile&tag=${t}`;
 }
 
-// Verify war against fwastats.com — returns true if match is FWA-flagged.
-export async function isFwaMatch(ourTag: string, oppTag: string): Promise<boolean> {
+// FWA registry from fwastats — opponent tag in this list = FWA match.
+let FWA_TAGS_CACHE: Set<string> | null = null;
+let FWA_TAGS_AT = 0;
+async function loadFwaTags(): Promise<Set<string>> {
+  const now = Date.now();
+  if (FWA_TAGS_CACHE && now - FWA_TAGS_AT < 60 * 60_000) return FWA_TAGS_CACHE;
   try {
-    const url = `https://fwastats.com/Clan/${tagNoHash(ourTag)}/Wars.json`;
-    const res = await fetch(url, { headers: { "User-Agent": "ClanLootTracker/1.0" } });
-    if (!res.ok) {
-      console.log("fwastats lookup non-ok", ourTag, res.status);
-      return false;
-    }
+    const res = await fetch("https://fwastats.com/Clans.json", { headers: { "User-Agent": "ClanLootTracker/1.0" } });
+    if (!res.ok) { console.log("fwastats Clans.json non-ok", res.status); return FWA_TAGS_CACHE ?? new Set(); }
     const data = await res.json();
-    const wars: any[] = Array.isArray(data) ? data : (data?.Wars ?? data?.wars ?? []);
-    const oppNorm = tagNoHash(oppTag);
-    const found = wars.find((w: any) => {
-      const t = tagNoHash(w?.OpponentTag ?? w?.opponentTag ?? w?.opponent_tag ?? "");
-      return t === oppNorm;
-    });
-    if (!found) return false;
-    // Most fwastats records carry a "MatchType" / "WarType" or similar field. If present, check it.
-    const type = (found.MatchType ?? found.WarType ?? found.matchType ?? "").toString().toLowerCase();
-    if (!type) return true; // present in fwastats list at all = high confidence FWA
-    return type.includes("fwa") || type.includes("match");
+    const arr: any[] = Array.isArray(data) ? data : (data?.Clans ?? data?.clans ?? []);
+    const set = new Set<string>();
+    for (const c of arr) {
+      const t = tagNoHash(c?.tag ?? c?.Tag ?? c?.clanTag ?? "");
+      if (t) set.add(t);
+    }
+    FWA_TAGS_CACHE = set; FWA_TAGS_AT = now;
+    console.log("Loaded FWA registry:", set.size, "clans");
+    return set;
   } catch (e) {
-    console.error("isFwaMatch error", e);
-    return false;
+    console.error("loadFwaTags error", e);
+    return FWA_TAGS_CACHE ?? new Set();
   }
+}
+
+// War is FWA when the opponent clan exists in the FWA registry.
+export async function isFwaMatch(_ourTag: string, oppTag: string): Promise<boolean> {
+  const tags = await loadFwaTags();
+  return tags.has(tagNoHash(oppTag));
 }
 
 // Look up TH emoji from the th_emojis table; fallback to plain text.
@@ -208,13 +212,14 @@ export function evaluateRules(opts: {
   decision: "win" | "lose";
   endTime: Date;
   ourMembers: WarMember[];
+  oppMembers?: WarMember[];
 }): RuleBreak[] {
   const breaks: RuleBreak[] = [];
   const last8Start = new Date(opts.endTime.getTime() - 8 * 3600_000);
 
-  // Build map: tag -> mapPosition
+  // Defender position lookup — defenders live in OPPONENT roster, not ours.
   const posMap: Record<string, number> = {};
-  for (const m of opts.ourMembers) posMap[m.tag] = m.mapPosition;
+  for (const m of (opts.oppMembers ?? [])) posMap[m.tag] = m.mapPosition;
 
   for (const m of opts.ourMembers) {
     const attacks = (m.attacks ?? []).slice().sort((a, b) => a.order - b.order);

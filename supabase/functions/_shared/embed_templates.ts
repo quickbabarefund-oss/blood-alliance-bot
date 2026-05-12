@@ -10,6 +10,13 @@ export const EMBED_SLOTS = [
   { slot: "war_lose",         label: "War Lose Announcement" },
   { slot: "war_reminder",     label: "War Reminder" },
   { slot: "clan_leaderboard", label: "Clan Donation Leaderboard" },
+  { slot: "player_info",      label: "/player_info embed" },
+  { slot: "clan_info",        label: "/clan_info embed" },
+  { slot: "current_war",      label: "/current_war embed" },
+  { slot: "war_log",          label: "/war_log embed" },
+  { slot: "clan_members",     label: "/clan_members embed" },
+  { slot: "cwl",              label: "/cwl embed" },
+  { slot: "capital_raids",    label: "/capital_raids embed" },
 ] as const;
 
 export interface EmbedTemplate {
