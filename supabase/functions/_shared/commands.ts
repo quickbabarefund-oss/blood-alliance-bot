@@ -351,4 +351,12 @@ export const COMMANDS: any[] = [
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
+  {
+    name: "compo",
+    description: "Show clan composition (Town Hall breakdown)",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
 ];
