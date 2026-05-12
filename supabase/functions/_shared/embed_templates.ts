@@ -19,7 +19,6 @@ export const EMBED_SLOTS = [
   { slot: "capital_raids",    label: "/capital_raids embed" },
 ] as const;
 
-// Variables available per slot for {placeholder} interpolation in title/description/footer/fields/content.
 export const SLOT_PLACEHOLDERS: Record<string, string[]> = {
   family_dashboard: [],
   war_started:  ["clan", "opponent", "team_size", "end_time"],
@@ -34,6 +33,88 @@ export const SLOT_PLACEHOLDERS: Record<string, string[]> = {
   clan_members: ["tag", "name"],
   cwl:          ["tag", "season"],
   capital_raids:["tag", "loot"],
+};
+
+// Human-readable descriptions for each placeholder variable.
+export const SLOT_PLACEHOLDER_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  war_started: {
+    clan:      "Your clan's name",
+    opponent:  "Enemy clan name",
+    team_size: "War team size (e.g. 15 vs 15)",
+    end_time:  "War end time (ISO / human-readable)",
+  },
+  war_win: {
+    clan:            "Your clan's name",
+    opponent:        "Enemy clan name",
+    stars:           "Your clan's star count",
+    opp_stars:       "Enemy star count",
+    destruction:     "Your destruction percentage",
+    opp_destruction: "Enemy destruction percentage",
+    team_size:       "War team size",
+    result:          "Result text (e.g. 'Victory')",
+  },
+  war_lose: {
+    clan:            "Your clan's name",
+    opponent:        "Enemy clan name",
+    stars:           "Your clan's star count",
+    opp_stars:       "Enemy star count",
+    destruction:     "Your destruction percentage",
+    opp_destruction: "Enemy destruction percentage",
+    team_size:       "War team size",
+    result:          "Result text (e.g. 'Defeat')",
+  },
+  war_reminder: {
+    clan:      "Your clan's name",
+    opponent:  "Enemy clan name",
+    ping:      "Mention string for the war role/channel",
+    minutes:   "Minutes remaining until war ends",
+    end_time:  "War end time",
+  },
+  clan_leaderboard: {
+    clan:  "Clan name",
+    tag:   "Clan tag (e.g. #ABC123)",
+    month: "Current month name",
+  },
+  player_info: {
+    name:     "Player name",
+    tag:      "Player tag",
+    th:       "Town Hall level",
+    trophies: "Trophy count",
+    clan:     "Current clan name",
+  },
+  clan_info: {
+    name:        "Clan name",
+    tag:         "Clan tag",
+    level:       "Clan level",
+    members:     "Member count / 50",
+    league:      "Current league name",
+    trophies:    "Clan trophy count",
+    streak:      "War win streak",
+    leader:      "Leader's name",
+    description: "Clan description",
+  },
+  current_war: {
+    our:      "Your clan name",
+    opponent: "Enemy clan name",
+    tag:      "Enemy clan tag",
+  },
+  war_log: {
+    tag:    "Clan tag",
+    wins:   "Number of war wins",
+    losses: "Number of war losses",
+  },
+  clan_members: {
+    tag:  "Clan tag",
+    name: "Clan name",
+  },
+  cwl: {
+    tag:    "Clan tag",
+    season: "CWL season string",
+  },
+  capital_raids: {
+    tag:  "Clan tag",
+    loot: "Total raid loot",
+  },
 };
 
 export interface EmbedTemplate {
