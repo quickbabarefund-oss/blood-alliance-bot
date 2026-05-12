@@ -89,7 +89,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
     // war-started msg
     if (!war.war_started_msg_sent && cfg.log_channel_id && now >= startTime) {
       try {
-        const payload = await buildReminderPayload({ reminderLabel: "War Day Started", emoji: "🚨", war, current: cw });
+        const payload = await buildReminderPayload({ reminderLabel: "War Day Started", emoji: "🚨", war, current: cw, slot: "war_started" });
         await createMessage(cfg.log_channel_id, payload);
         await sb.from("wars").update({ war_started_msg_sent: true, updated_at: new Date().toISOString() }).eq("id", war.id);
         war.war_started_msg_sent = true;
