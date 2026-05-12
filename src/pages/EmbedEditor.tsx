@@ -39,12 +39,20 @@ function hexToInt(h: string): number {
   return parseInt(/^[0-9a-f]{6}$/i.test(m) ? m : "5865f2", 16);
 }
 
+const EMOJI_PALETTE = [
+  "🏰","🛡️","⚔️","🏆","🔥","👑","🥈","🎖️","🏷️","👥","🎮","🍫",
+  "⭐","💥","🎯","📊","📈","📉","🟢","🔴","🟡","✅","❌","⏰",
+  "🕒","🗡️","🪖","💀","☠️","🧱","💣","⚡","✨","💎","📜","📣",
+  "📢","🔔","❤️","💙","💚","🎁","📥","🦸","🌍","ℹ️","🏯","🥇",
+];
+
 export default function EmbedEditor() {
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotMeta[]>([]);
+  const [placeholders, setPlaceholders] = useState<Record<string, string[]>>({});
   const [guildName, setGuildName] = useState<string | null>(null);
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
@@ -58,6 +66,7 @@ export default function EmbedEditor() {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? r.statusText);
         setSlots(j.slots ?? []);
+        setPlaceholders(j.placeholders ?? {});
         setGuildName(j.guild_name ?? null);
         const map: Record<string, Template> = {};
         for (const s of j.slots ?? []) {
@@ -150,6 +159,9 @@ export default function EmbedEditor() {
               <Switch checked={tpl.enabled} onCheckedChange={(v) => update({ enabled: v })} />
             </div>
           </div>
+
+          <PlaceholderBar vars={placeholders[active] ?? []} />
+          <EmojiBar />
 
           <Field label="Title">
             <Input value={tpl.title ?? ""} onChange={(e) => update({ title: e.target.value })} />
@@ -244,6 +256,53 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <Label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function PlaceholderBar({ vars }: { vars: string[] }) {
+  if (!vars.length) {
+    return (
+      <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+        No variables for this slot — text is used as-is.
+      </div>
+    );
+  }
+  const copy = (v: string) => {
+    navigator.clipboard.writeText(`{${v}}`);
+    toast({ title: "Copied", description: `{${v}} → clipboard. Paste into any field.` });
+  };
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-muted-foreground">Available placeholders (click to copy)</div>
+      <div className="flex flex-wrap gap-1.5">
+        {vars.map((v) => (
+          <button key={v} type="button" onClick={() => copy(v)}
+            className="rounded bg-secondary px-2 py-0.5 text-xs font-mono text-gold hover:bg-secondary/70">
+            {`{${v}}`}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmojiBar() {
+  const copy = (e: string) => {
+    navigator.clipboard.writeText(e);
+    toast({ title: "Emoji copied", description: `${e} → clipboard.` });
+  };
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-muted-foreground">Emoji palette (click to copy)</div>
+      <div className="flex flex-wrap gap-1">
+        {EMOJI_PALETTE.map((e) => (
+          <button key={e} type="button" onClick={() => copy(e)}
+            className="rounded px-1.5 py-0.5 text-lg hover:bg-secondary">
+            {e}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

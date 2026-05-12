@@ -19,6 +19,23 @@ export const EMBED_SLOTS = [
   { slot: "capital_raids",    label: "/capital_raids embed" },
 ] as const;
 
+// Variables available per slot for {placeholder} interpolation in title/description/footer/fields/content.
+export const SLOT_PLACEHOLDERS: Record<string, string[]> = {
+  family_dashboard: [],
+  war_started:  ["clan", "opponent", "team_size", "end_time"],
+  war_win:      ["clan", "opponent", "stars", "opp_stars", "destruction", "opp_destruction", "team_size", "result"],
+  war_lose:     ["clan", "opponent", "stars", "opp_stars", "destruction", "opp_destruction", "team_size", "result"],
+  war_reminder: ["clan", "opponent", "ping", "minutes", "end_time"],
+  clan_leaderboard: ["clan", "tag", "month"],
+  player_info:  ["name", "tag", "th", "trophies", "clan"],
+  clan_info:    ["name", "tag", "level", "members", "league", "trophies", "streak", "leader", "description"],
+  current_war:  ["our", "opponent", "tag"],
+  war_log:      ["tag", "wins", "losses"],
+  clan_members: ["tag", "name"],
+  cwl:          ["tag", "season"],
+  capital_raids:["tag", "loot"],
+};
+
 export interface EmbedTemplate {
   slot: string;
   enabled: boolean;
