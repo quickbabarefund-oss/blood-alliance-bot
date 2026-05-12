@@ -1222,13 +1222,13 @@ Deno.serve(async (req) => {
           try {
             const data = await builder(guildId, { tag, targetUser, caller });
             // Replace the ephemeral picker with the result (still ephemeral to caller).
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/messages/@original`, {
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
               method: "PATCH", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ content: "", components: [], ...data }),
             });
           } catch (e) {
             console.error("coc pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/messages/@original`, {
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
               method: "PATCH", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, components: [], embeds: [] }),
             });
