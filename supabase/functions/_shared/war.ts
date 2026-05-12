@@ -199,10 +199,28 @@ export async function buildReminderPayload(opts: {
   const header = `${opts.emoji} **${opts.reminderLabel}** — ${ours.name} \`${ours.tag}\` **VS** ${opp.name} \`${opp.tag}\``;
   const body = lines || "✅ All attacks used!";
   // Discord caps content at 2000 chars
-  const content = `${header}\n${body}`.slice(0, 1990);
+  let content = `${header}\n${body}`.slice(0, 1990);
 
   // Dedupe user IDs and cap to 100 (Discord limit)
   const uniqueUsers = Array.from(new Set(mentionedUsers)).slice(0, 100);
+
+  // Allow guild template to override the content (placeholders interpolated).
+  const slot = opts.slot ?? (opts.reminderLabel.toLowerCase().includes("started") ? "war_started" : "war_reminder");
+  if (opts.war?.guild_id) {
+    try {
+      const { applyTemplate } = await import("./embed_templates.ts");
+      const end = parseCocTime(opts.current.endTime ?? "")?.getTime();
+      const vars = {
+        clan: ours.name, opponent: opp.name,
+        team_size: opts.current.teamSize ?? "",
+        end_time: end ? `<t:${Math.floor(end / 1000)}:R>` : "",
+        ping: uniqueUsers.map((u) => `<@${u}>`).join(" "),
+        minutes: opts.minutes ?? "",
+      };
+      const r = await applyTemplate(opts.war.guild_id, slot, {}, { vars });
+      if (r.content) content = r.content.slice(0, 1990);
+    } catch (e) { console.error("template apply (reminder)", e); }
+  }
   return { content, allowed_mentions: { users: uniqueUsers } };
 }
 
