@@ -53,6 +53,7 @@ export default function EmbedEditor() {
   const [error, setError] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotMeta[]>([]);
   const [placeholders, setPlaceholders] = useState<Record<string, string[]>>({});
+  const [placeholderDescriptions, setPlaceholderDescriptions] = useState<Record<string, Record<string, string>>>({});
   const [guildName, setGuildName] = useState<string | null>(null);
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
