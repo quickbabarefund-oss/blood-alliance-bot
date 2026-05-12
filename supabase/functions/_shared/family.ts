@@ -142,14 +142,18 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
     return uid ? `**${m.name}** <@${uid}>` : `**${m.name}** \`${m.tag}\``;
   };
 
+  const tagNoHash = (c.tag ?? clanTag).replace(/^#/, "");
+  const inGameUrl = `https://link.clashofclans.com/en?action=OpenClanProfile&tag=${encodeURIComponent(c.tag ?? clanTag)}`;
+  const ccUrl = `https://cc.fwafarm.com/cc_n/clan.php?tag=${tagNoHash}`;
+
   const fields: any[] = [
     { name: "🏷️ Tag", value: `\`${c.tag ?? clanTag}\``, inline: true },
     { name: "👥 Members", value: `${memberCount}/50`, inline: true },
     { name: "🏆 Level", value: String(c.clanLevel ?? "—"), inline: true },
+    { name: "⚔️ War League", value: c.warLeague?.name ?? "—", inline: true },
+    { name: "🛡️ Trophies", value: String(c.clanPoints ?? "—"), inline: true },
+    { name: "🔥 Win Streak", value: String(c.warWinStreak ?? 0), inline: true },
   ];
-  if (c.warLeague?.name) fields.push({ name: "⚔️ War League", value: c.warLeague.name, inline: true });
-  if (c.clanPoints != null) fields.push({ name: "🛡️ Trophies", value: String(c.clanPoints), inline: true });
-  if (c.warWinStreak != null) fields.push({ name: "🔥 Win Streak", value: String(c.warWinStreak), inline: true });
 
   fields.push({
     name: "👑 Leader",
@@ -164,18 +168,38 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
     inline: false,
   });
   fields.push({ name: "🎖️ Elders", value: String(elders), inline: true });
+  fields.push({
+    name: "🔗 Links",
+    value: `[🎮 Open in Game](${inGameUrl}) • [🍫 ChocolateClash](${ccUrl})`,
+    inline: false,
+  });
 
-  const embed: any = {
-    title: `🏰 ${c.name ?? clanTag}`,
+  const baseEmbed: any = {
+    author: c.badgeUrls?.small
+      ? { name: c.name ?? clanTag, icon_url: c.badgeUrls.small }
+      : undefined,
+    title: c.name ?? clanTag,
+    url: inGameUrl,
     description: c.description ? String(c.description).slice(0, 300) : undefined,
     color: DEFAULT_COLOR,
-    thumbnail: c.badgeUrls?.medium ? { url: c.badgeUrls.medium } : undefined,
+    thumbnail: c.badgeUrls?.large ? { url: c.badgeUrls.large } : (c.badgeUrls?.medium ? { url: c.badgeUrls.medium } : undefined),
     fields,
     footer: { text: "Live from Clash of Clans" },
     timestamp: new Date().toISOString(),
   };
-  // Don't ping users — display only
-  return { embeds: [embed], flags: 64, allowed_mentions: { parse: [] } };
+
+  // Allow guild admins to override via Embed Editor (clan_info slot)
+  const tplResult = await applyTemplate(c.tag ? "" : "", "clan_info", baseEmbed, {
+    keepFields: true,
+    vars: {
+      name: c.name ?? "", tag: c.tag ?? clanTag,
+      level: c.clanLevel ?? "", members: memberCount,
+      league: c.warLeague?.name ?? "", trophies: c.clanPoints ?? "",
+      streak: c.warWinStreak ?? 0, leader: leader?.name ?? "",
+      description: c.description ?? "",
+    },
+  });
+  return { embeds: [tplResult.embed], content: tplResult.content, flags: 64, allowed_mentions: { parse: [] } };
 }
 
 // Persist dashboard message — create or edit
