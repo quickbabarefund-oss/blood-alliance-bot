@@ -8,7 +8,7 @@ import { buildClanEmbed, buildGlobalEmbed } from "../_shared/embeds.ts";
 import { normalizeTag, postCoc } from "../_shared/coc.ts";
 import { istMonthKey } from "../_shared/month.ts";
 import { canRunCommand } from "../_shared/permissions.ts";
-import { syncGuildCommands, createMessageWithFile } from "../_shared/discord.ts";
+import { syncGuildCommands, createMessage, createMessageWithFile } from "../_shared/discord.ts";
 import { COMMANDS } from "../_shared/commands.ts";
 import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
@@ -1132,8 +1132,17 @@ Deno.serve(async (req) => {
       if (cid.startsWith("fam:view:")) {
         const guildId = interaction.guild_id ?? "";
         const tag = interaction.data?.values?.[0];
-        const data = await buildClanDetailEmbed(tag, guildId);
-        return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
+        const channelId = interaction.channel_id;
+        (async () => {
+          try {
+            const data = await buildClanDetailEmbed(tag, guildId);
+            const { flags: _flags, ...channelPayload } = data;
+            await createMessage(channelId, channelPayload);
+          } catch (e) {
+            console.error("family clan detail post failed", e);
+          }
+        })();
+        return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
