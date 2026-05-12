@@ -1038,7 +1038,33 @@ async function handleFamilyCustomize(interaction: any): Promise<Response> {
   return reply(`✅ Dashboard updated: ${summary.join(", ") || "no changes"}.`);
 }
 
-// --- /embed_editor ---
+// --- Generic dispatcher for the read-only CoC commands ---
+async function handleCocCmd(
+  interaction: any,
+  builder: (guildId: string, args: { tag?: string; targetUser?: string; caller: string }) => Promise<any>,
+): Promise<Response> {
+  const guildId = interaction.guild_id ?? "";
+  const opts = interaction.data.options ?? [];
+  const tag = getOpt(opts, "tag");
+  const targetUser = getOpt(opts, "user");
+  const caller = callerUserId(interaction);
+  const appId = interaction.application_id;
+  const token = interaction.token;
+
+  (async () => {
+    try {
+      const data = await builder(guildId, { tag, targetUser, caller });
+      await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, flags: 0 }),
+      });
+    } catch (e) {
+      console.error("coc cmd failed", e);
+      await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(false);
+}
 const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://clan-loot-tracker.lovable.app";
 async function handleEmbedEditor(interaction: any): Promise<Response> {
   if (!((BigInt(interaction.member?.permissions ?? "0")) & 0x8n)) {
