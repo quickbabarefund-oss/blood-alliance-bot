@@ -114,7 +114,7 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
 }
 
 // Build per-clan detail embed (live from CoC API). Mentions linked Discord users when known.
-export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
+export async function buildClanDetailEmbed(clanTag: string, guildId?: string): Promise<any> {
   let clan: CoCClan | null = null;
   try { clan = await fetchClan(clanTag); }
   catch (e) {
@@ -188,8 +188,11 @@ export async function buildClanDetailEmbed(clanTag: string): Promise<any> {
     timestamp: new Date().toISOString(),
   };
 
+  if (!guildId) {
+    return { embeds: [baseEmbed], flags: 64, allowed_mentions: { parse: [] } };
+  }
   // Allow guild admins to override via Embed Editor (clan_info slot)
-  const tplResult = await applyTemplate(c.tag ? "" : "", "clan_info", baseEmbed, {
+  const tplResult = await applyTemplate(guildId, "clan_info", baseEmbed, {
     keepFields: true,
     vars: {
       name: c.name ?? "", tag: c.tag ?? clanTag,
