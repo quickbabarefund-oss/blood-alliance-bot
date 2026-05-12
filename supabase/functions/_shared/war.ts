@@ -374,5 +374,25 @@ export async function buildResultEmbeds(opts: {
       }
     }
   }
-  return { embeds: [page1, page2], txt: lines.join("\n") };
+  // Apply guild template override for war_win / war_lose (interpolates title/description/footer/fields/content).
+  let finalPage1: any = page1;
+  let content: string | undefined;
+  if (w.guild_id && (w.result === "win" || w.result === "lose")) {
+    try {
+      const { applyTemplate } = await import("./embed_templates.ts");
+      const slot = w.result === "win" ? "war_win" : "war_lose";
+      const vars = {
+        clan: w.clan_name ?? w.clan_tag,
+        opponent: w.opponent_name ?? w.opponent_tag,
+        stars: w.our_stars ?? 0, opp_stars: w.opp_stars ?? 0,
+        destruction: (w.our_destruction ?? 0).toFixed?.(2) ?? w.our_destruction ?? 0,
+        opp_destruction: (w.opp_destruction ?? 0).toFixed?.(2) ?? w.opp_destruction ?? 0,
+        team_size: w.team_size ?? "",
+        result: (w.result ?? "").toUpperCase(),
+      };
+      const r = await applyTemplate(w.guild_id, slot, page1, { vars, keepFields: true });
+      finalPage1 = r.embed; content = r.content;
+    } catch (e) { console.error("template apply (result)", e); }
+  }
+  return { embeds: [finalPage1, page2], txt: lines.join("\n"), content };
 }
