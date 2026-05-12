@@ -161,6 +161,8 @@ export async function buildReminderPayload(opts: {
   emoji: string;
   war: any; // wars row
   current: CurrentWar;
+  slot?: "war_started" | "war_reminder";
+  minutes?: number;
 }): Promise<{ content: string; allowed_mentions: any }> {
   const thMap = await loadThEmojis();
   const sb = adminClient();
@@ -197,10 +199,28 @@ export async function buildReminderPayload(opts: {
   const header = `${opts.emoji} **${opts.reminderLabel}** — ${ours.name} \`${ours.tag}\` **VS** ${opp.name} \`${opp.tag}\``;
   const body = lines || "✅ All attacks used!";
   // Discord caps content at 2000 chars
-  const content = `${header}\n${body}`.slice(0, 1990);
+  let content = `${header}\n${body}`.slice(0, 1990);
 
   // Dedupe user IDs and cap to 100 (Discord limit)
   const uniqueUsers = Array.from(new Set(mentionedUsers)).slice(0, 100);
+
+  // Allow guild template to override the content (placeholders interpolated).
+  const slot = opts.slot ?? (opts.reminderLabel.toLowerCase().includes("started") ? "war_started" : "war_reminder");
+  if (opts.war?.guild_id) {
+    try {
+      const { applyTemplate } = await import("./embed_templates.ts");
+      const end = parseCocTime(opts.current.endTime ?? "")?.getTime();
+      const vars = {
+        clan: ours.name, opponent: opp.name,
+        team_size: opts.current.teamSize ?? "",
+        end_time: end ? `<t:${Math.floor(end / 1000)}:R>` : "",
+        ping: uniqueUsers.map((u) => `<@${u}>`).join(" "),
+        minutes: opts.minutes ?? "",
+      };
+      const r = await applyTemplate(opts.war.guild_id, slot, {}, { vars });
+      if (r.content) content = r.content.slice(0, 1990);
+    } catch (e) { console.error("template apply (reminder)", e); }
+  }
   return { content, allowed_mentions: { users: uniqueUsers } };
 }
 
@@ -295,7 +315,7 @@ export async function buildResultEmbeds(opts: {
   warRow: any;
   breaks: RuleBreak[];
   ourMembers: WarMember[];
-}): Promise<{ embeds: any[]; txt: string }> {
+}): Promise<{ embeds: any[]; txt: string; content?: string }> {
   const w = opts.warRow;
   const violators = new Set(opts.breaks.map((b) => b.player_tag));
   const compliantCount = opts.ourMembers.length - violators.size;
@@ -303,7 +323,7 @@ export async function buildResultEmbeds(opts: {
   const noEmoji = "<a:cross:1477055818229878915>";
   const allOk = violators.size === 0;
 
-  const page1 = {
+  const page1: any = {
     title: `${w.clan_name ?? w.clan_tag} vs ${w.opponent_name ?? w.opponent_tag} — Final Result`,
     description: `[${w.clan_name ?? w.clan_tag} (\`${w.clan_tag}\`)](${clanProfileLink(w.clan_tag)}) **VS** [${w.opponent_name ?? w.opponent_tag} (\`${w.opponent_tag}\`)](${clanProfileLink(w.opponent_tag)})`,
     color: w.result === "win" ? 0x57F287 : w.result === "lose" ? 0xED4245 : 0xF1B93B,
@@ -354,5 +374,25 @@ export async function buildResultEmbeds(opts: {
       }
     }
   }
-  return { embeds: [page1, page2], txt: lines.join("\n") };
+  // Apply guild template override for war_win / war_lose (interpolates title/description/footer/fields/content).
+  let finalPage1: any = page1;
+  let content: string | undefined;
+  if (w.guild_id && (w.result === "win" || w.result === "lose")) {
+    try {
+      const { applyTemplate } = await import("./embed_templates.ts");
+      const slot = w.result === "win" ? "war_win" : "war_lose";
+      const vars = {
+        clan: w.clan_name ?? w.clan_tag,
+        opponent: w.opponent_name ?? w.opponent_tag,
+        stars: w.our_stars ?? 0, opp_stars: w.opp_stars ?? 0,
+        destruction: (w.our_destruction ?? 0).toFixed?.(2) ?? w.our_destruction ?? 0,
+        opp_destruction: (w.opp_destruction ?? 0).toFixed?.(2) ?? w.opp_destruction ?? 0,
+        team_size: w.team_size ?? "",
+        result: (w.result ?? "").toUpperCase(),
+      };
+      const r = await applyTemplate(w.guild_id, slot, page1, { vars, keepFields: true });
+      finalPage1 = r.embed; content = r.content;
+    } catch (e) { console.error("template apply (result)", e); }
+  }
+  return { embeds: [finalPage1, page2], txt: lines.join("\n"), content };
 }

@@ -89,7 +89,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
     // war-started msg
     if (!war.war_started_msg_sent && cfg.log_channel_id && now >= startTime) {
       try {
-        const payload = await buildReminderPayload({ reminderLabel: "War Day Started", emoji: "🚨", war, current: cw });
+        const payload = await buildReminderPayload({ reminderLabel: "War Day Started", emoji: "🚨", war, current: cw, slot: "war_started" });
         await createMessage(cfg.log_channel_id, payload);
         await sb.from("wars").update({ war_started_msg_sent: true, updated_at: new Date().toISOString() }).eq("id", war.id);
         war.war_started_msg_sent = true;
@@ -111,7 +111,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
           const label = r.minutes >= 60 && r.minutes % 60 === 0
             ? `${r.minutes / 60}h ${r.anchor === "before_end" ? "before war ends" : "into battle day"}`
             : `${r.minutes}m ${r.anchor === "before_end" ? "before war ends" : "into battle day"}`;
-          const payload = await buildReminderPayload({ reminderLabel: `${label} reminder`, emoji: "⏰", war, current: cw });
+          const payload = await buildReminderPayload({ reminderLabel: `${label} reminder`, emoji: "⏰", war, current: cw, slot: "war_reminder", minutes: r.minutes });
           await createMessage(cfg.log_channel_id, payload);
           fired.push(r.id);
           await sb.from("wars").update({ fired_reminders: fired, updated_at: new Date().toISOString() }).eq("id", war.id);
@@ -179,9 +179,9 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
         result, our_stars: ourStars, opp_stars: oppStars,
         our_destruction: ourDes, opp_destruction: oppDes,
       };
-      const { embeds, txt } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
+      const { embeds, txt, content } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
       const filename = `war-${(war.clan_tag).replace("#", "")}-vs-${(war.opponent_tag).replace("#", "")}-${startTime.toISOString().slice(0, 10)}.txt`;
-      const msgId = await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
+      const msgId = await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds, content });
 
       await sb.from("wars").update({
         result, our_stars: ourStars, opp_stars: oppStars,
