@@ -140,7 +140,8 @@ export async function buildPlayerInfo(guildId: string, args: { tag?: string; tar
 
 // ---------- /clan_info ----------
 export async function buildClanInfo(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const r = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = r.tag; if (!tag) return { embeds: [errEmbed(r.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
   let c: any;
   try { c = await fetchClan(tag); } catch (e) {
