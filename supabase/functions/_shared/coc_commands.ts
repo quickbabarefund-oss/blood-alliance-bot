@@ -49,6 +49,45 @@ async function resolveTag(opts: {
   return links[0]?.tag ?? null;
 }
 
+// Resolve a CLAN tag for clan-context commands.
+// - If `explicit` is passed: try as clan tag first; if not a clan, treat as
+//   player tag and return that player's current clan tag.
+// - Otherwise: pull the user's linked player tag(s) and return their clan.
+async function resolveClanTag(opts: {
+  explicit?: string;
+  userId?: string;
+  fallbackUserId?: string;
+}): Promise<{ tag: string | null; error?: string }> {
+  if (opts.explicit) {
+    const t = normalizeTag(opts.explicit);
+    try {
+      await fetchClan(t);
+      return { tag: t };
+    } catch (_e) {
+      // Not a clan — maybe it's a player tag. Look up player → clan.
+      try {
+        const p: any = await fetchPlayer(t);
+        if (p?.clan?.tag) return { tag: normalizeTag(p.clan.tag) };
+        return { tag: null, error: `\`${t}\` is a player not in any clan.` };
+      } catch (e) {
+        return { tag: null, error: `\`${t}\`: ${e instanceof Error ? e.message : String(e)}` };
+      }
+    }
+  }
+  const uid = opts.userId ?? opts.fallbackUserId;
+  if (!uid) return { tag: null };
+  const links = await fetchLiveUserLinks(uid);
+  const playerTag = links[0]?.tag;
+  if (!playerTag) return { tag: null };
+  try {
+    const p: any = await fetchPlayer(playerTag);
+    if (p?.clan?.tag) return { tag: normalizeTag(p.clan.tag) };
+    return { tag: null, error: `Linked player \`${playerTag}\` is not in any clan.` };
+  } catch (e) {
+    return { tag: null, error: `\`${playerTag}\`: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 function errEmbed(msg: string) {
   return { title: "⚠️ Lookup failed", description: msg, color: COLOR_RED };
 }
@@ -101,8 +140,9 @@ export async function buildPlayerInfo(guildId: string, args: { tag?: string; tar
 
 // ---------- /clan_info ----------
 export async function buildClanInfo(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const r = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = r.tag; if (!tag) return { embeds: [errEmbed(r.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
+  // tag check above
   let c: any;
   try { c = await fetchClan(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
@@ -133,8 +173,8 @@ export async function buildClanInfo(guildId: string, args: { tag?: string; targe
 
 // ---------- /current_war ----------
 export async function buildCurrentWar(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let cw: any;
   try { cw = await postCoc({ action: "current_war", tag }); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
@@ -171,8 +211,8 @@ export async function buildCurrentWar(guildId: string, args: { tag?: string; tar
 
 // ---------- /war_log ----------
 export async function buildWarLog(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let log: any;
   try { log = await postCoc({ action: "war_log", tag }); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
@@ -207,8 +247,8 @@ export async function buildWarLog(guildId: string, args: { tag?: string; targetU
 
 // ---------- /clan_members ----------
 export async function buildClanMembers(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let c: any;
   try { c = await fetchClan(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
@@ -235,8 +275,8 @@ export async function buildClanMembers(guildId: string, args: { tag?: string; ta
 
 // ---------- /cwl ----------
 export async function buildCwl(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let g: any;
   try { g = await postCoc({ action: "cwl_group", tag }); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
@@ -265,8 +305,8 @@ export async function buildCwl(guildId: string, args: { tag?: string; targetUser
 
 // ---------- /capital_raids ----------
 export async function buildCapitalRaids(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let r: any;
   try { r = await postCoc({ action: "capital_raids", tag }); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
@@ -296,8 +336,8 @@ export async function buildCapitalRaids(guildId: string, args: { tag?: string; t
 
 // ---------- /compo ----------
 export async function buildCompo(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let c: any;
   try { c = await fetchClan(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
