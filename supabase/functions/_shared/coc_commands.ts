@@ -49,6 +49,45 @@ async function resolveTag(opts: {
   return links[0]?.tag ?? null;
 }
 
+// Resolve a CLAN tag for clan-context commands.
+// - If `explicit` is passed: try as clan tag first; if not a clan, treat as
+//   player tag and return that player's current clan tag.
+// - Otherwise: pull the user's linked player tag(s) and return their clan.
+async function resolveClanTag(opts: {
+  explicit?: string;
+  userId?: string;
+  fallbackUserId?: string;
+}): Promise<{ tag: string | null; error?: string }> {
+  if (opts.explicit) {
+    const t = normalizeTag(opts.explicit);
+    try {
+      await fetchClan(t);
+      return { tag: t };
+    } catch (_e) {
+      // Not a clan — maybe it's a player tag. Look up player → clan.
+      try {
+        const p: any = await fetchPlayer(t);
+        if (p?.clan?.tag) return { tag: normalizeTag(p.clan.tag) };
+        return { tag: null, error: `\`${t}\` is a player not in any clan.` };
+      } catch (e) {
+        return { tag: null, error: `\`${t}\`: ${e instanceof Error ? e.message : String(e)}` };
+      }
+    }
+  }
+  const uid = opts.userId ?? opts.fallbackUserId;
+  if (!uid) return { tag: null };
+  const links = await fetchLiveUserLinks(uid);
+  const playerTag = links[0]?.tag;
+  if (!playerTag) return { tag: null };
+  try {
+    const p: any = await fetchPlayer(playerTag);
+    if (p?.clan?.tag) return { tag: normalizeTag(p.clan.tag) };
+    return { tag: null, error: `Linked player \`${playerTag}\` is not in any clan.` };
+  } catch (e) {
+    return { tag: null, error: `\`${playerTag}\`: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 function errEmbed(msg: string) {
   return { title: "⚠️ Lookup failed", description: msg, color: COLOR_RED };
 }
