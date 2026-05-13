@@ -247,8 +247,8 @@ export async function buildWarLog(guildId: string, args: { tag?: string; targetU
 
 // ---------- /clan_members ----------
 export async function buildClanMembers(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
-  const tag = await resolveTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
-  if (!tag) return { embeds: [errEmbed("Provide a `tag:` or link a clan with `/link clan`.")], flags: 64 };
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let c: any;
   try { c = await fetchClan(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
