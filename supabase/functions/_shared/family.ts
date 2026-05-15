@@ -119,7 +119,14 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
 
   // Apply user-overridden template (from web UI builder), preserving fields
   const tplResult = await applyTemplate(guildId, "family_dashboard", embed, { keepFields: true });
-  return { content: tplResult.content ?? undefined, embeds: [tplResult.embed], components, allowed_mentions: { parse: [] } };
+  const finalEmbed = { ...tplResult.embed };
+  // Strip leading/trailing blank lines from title and description so saved
+  // edits are always visibly reflected on Discord (otherwise hidden \n\n
+  // prefixes make Discord render an unchanged-looking embed).
+  if (typeof finalEmbed.title === "string") finalEmbed.title = finalEmbed.title.replace(/^[\s\u200b]+|[\s\u200b]+$/g, "");
+  if (typeof finalEmbed.description === "string") finalEmbed.description = finalEmbed.description.replace(/^[\s\u200b]+|[\s\u200b]+$/g, "");
+  const content = tplResult.content ? tplResult.content.replace(/^[\s\u200b]+|[\s\u200b]+$/g, "") : undefined;
+  return { content: content || undefined, embeds: [finalEmbed], components, allowed_mentions: { parse: [] } };
 }
 
 // Build per-clan detail embed (live from CoC API). Mentions linked Discord users when known.
@@ -215,12 +222,18 @@ export async function buildClanDetailEmbed(clanTag: string, guildId?: string): P
 }
 
 // Persist dashboard message — create or edit
-export async function syncDashboardMessage(guildId: string): Promise<{ ok: boolean; error?: string }> {
+export async function syncDashboardMessage(guildId: string): Promise<{ ok: boolean; error?: string; message_id?: string; channel_id?: string; title?: string; description_preview?: string }> {
   const sb = adminClient();
   const { data: cfg } = await sb.from("family_dashboards").select("*").eq("guild_id", guildId).maybeSingle();
   if (!cfg) return { ok: false, error: "no dashboard registered. Run `/family_clan_dashboard` first." };
 
   const payload = await buildDashboardPayload(guildId, cfg as FamilyDashboardCfg);
+  const sentEmbed = payload.embeds?.[0] ?? {};
+  const proof = {
+    title: typeof sentEmbed.title === "string" ? sentEmbed.title : undefined,
+    description_preview: typeof sentEmbed.description === "string" ? sentEmbed.description.slice(0, 80) : undefined,
+    channel_id: cfg.channel_id,
+  };
 
   if (cfg.message_id) {
     const r = await fetch(`https://discord.com/api/v10/channels/${cfg.channel_id}/messages/${cfg.message_id}`, {
@@ -230,8 +243,14 @@ export async function syncDashboardMessage(guildId: string): Promise<{ ok: boole
     });
     if (r.ok) {
       await sb.from("family_dashboards").update({ updated_at: new Date().toISOString() }).eq("guild_id", guildId);
-      return { ok: true };
+      return { ok: true, ...proof, message_id: cfg.message_id };
     }
+    const errText = (await r.text()).slice(0, 300);
+    // Only fall through to creating a NEW message if the existing one was deleted.
+    if (r.status !== 404 && r.status !== 410) {
+      return { ok: false, error: `Discord PATCH ${r.status}: ${errText}`, ...proof, message_id: cfg.message_id };
+    }
+    console.warn("dashboard message gone, posting fresh", r.status, errText);
   }
 
   const r2 = await fetch(`https://discord.com/api/v10/channels/${cfg.channel_id}/messages`, {
