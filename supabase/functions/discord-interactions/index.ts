@@ -1173,13 +1173,41 @@ Deno.serve(async (req) => {
     ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e));
   }
 
+  // Autocomplete: search Family clans for /clan_info, /compo, etc.
+  if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE) {
+    try {
+      const cmdName = interaction.data?.name ?? "";
+      const focused = (interaction.data?.options ?? []).find((o: any) => o.focused);
+      if (!COC_AUTOCOMPLETE_CMDS.has(cmdName) || !focused || focused.name !== "tag") {
+        return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
+      }
+      const q = String(focused.value ?? "").trim().toLowerCase().replace(/^#/, "");
+      const guildId = interaction.guild_id ?? "";
+      const sb = adminClient();
+      const { data: rows } = await sb.from("family_clans")
+        .select("clan_tag,clan_name,category_id,position")
+        .eq("guild_id", guildId)
+        .order("position")
+        .limit(200);
+      const list = (rows ?? []) as any[];
+      const filtered = q
+        ? list.filter((r) => (r.clan_name ?? "").toLowerCase().includes(q) || (r.clan_tag ?? "").toLowerCase().replace(/^#/, "").includes(q))
+        : list;
+      const choices = filtered.slice(0, 25).map((r) => {
+        const tag = String(r.clan_tag).startsWith("#") ? r.clan_tag : `#${r.clan_tag}`;
+        const name = (r.clan_name ?? "").trim() || tag;
+        return { name: `${name} (${tag})`.slice(0, 100), value: tag };
+      });
+      return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices } }), { headers: { "Content-Type": "application/json" } });
+    } catch (e) {
+      console.error("autocomplete error", e);
+      return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
+    }
+  }
+
   if (interaction.type === MESSAGE_COMPONENT) {
     try {
       const cid: string = interaction.data?.custom_id ?? "";
-      // Formats:
-      //   lb:clan:<GUILD>:<TAG>:first|prev:<n>|next:<n>|last
-      //   lb:global:<GUILD>:first|prev:<n>|next:<n>|last
-      const VERY_LARGE = 1_000_000;
       if (cid.startsWith("lb:") && !cid.endsWith(":noop")) {
         const parts = cid.split(":");
         const kind = parts[1]; // "clan" | "global"
