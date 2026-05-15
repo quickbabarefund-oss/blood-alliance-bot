@@ -14,7 +14,7 @@ import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from 
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
-  buildClanMembers, buildCwl, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
+  buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
 } from "../_shared/coc_commands.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
@@ -1046,6 +1046,8 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   war_log: buildWarLog,
   clan_members: buildClanMembers,
   cwl: buildCwl,
+  cwl_roster: buildCwlRoster,
+  cwl_board: buildCwlBoard,
   capital_raids: buildCapitalRaids,
   compo: buildCompo,
 };
@@ -1282,6 +1284,8 @@ Deno.serve(async (req) => {
         case "war_log": return await handleCocCmd(interaction, buildWarLog);
         case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
         case "cwl": return await handleCocCmd(interaction, buildCwl);
+        case "cwl_roster": return await handleCocCmd(interaction, buildCwlRoster);
+        case "cwl_board": return await handleCocCmd(interaction, buildCwlBoard);
         case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
         case "compo": return await handleCocCmd(interaction, buildCompo);
         default: return reply(`Unknown command: ${name}`);

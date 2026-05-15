@@ -378,3 +378,145 @@ export async function buildCompo(guildId: string, args: { tag?: string; targetUs
   };
   return await send(guildId, "compo", base, { tag, name: c.name, members: total, avg_th: avgTh });
 }
+
+// ---------- /cwl_roster ----------
+// Lists every clan in the current CWL group with its full roster (TH + name + tag).
+export async function buildCwlRoster(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
+  let g: any;
+  try { g = await postCoc({ action: "cwl_group", tag }); } catch (e) {
+    return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
+  }
+  if (!g || g.state === "notInWar" || !g.clans?.length) {
+    return { embeds: [{ title: "🛡️ CWL Roster", description: g?.reason ?? `\`${tag}\` is not currently in CWL.`, color: COLOR_GOLD }] };
+  }
+  const thMap = await loadThEmojis();
+  const clans: any[] = g.clans ?? [];
+  const header = {
+    title: `🛡️ CWL Roster — ${g.season ?? "current"}`,
+    description: `**${clans.length}** clans • War size **${g.teamSize ?? clans[0]?.members?.length ?? "—"}**`,
+    color: COLOR,
+  };
+  const embeds: any[] = [header];
+  for (const cl of clans.slice(0, 9)) {
+    const members: any[] = (cl.members ?? []).slice().sort((a: any, b: any) => (b.townHallLevel ?? 0) - (a.townHallLevel ?? 0));
+    const counts = new Map<number, number>();
+    for (const m of members) counts.set(m.townHallLevel ?? 0, (counts.get(m.townHallLevel ?? 0) ?? 0) + 1);
+    const compoLine = Array.from(counts.entries()).sort((a, b) => b[0] - a[0])
+      .map(([th, n]) => `${thEmoji(thMap, th)}×${n}`).join(" ");
+    const lines = members.map((m, i) =>
+      `\`${String(i + 1).padStart(2)}.\` ${thEmoji(thMap, m.townHallLevel)} **${m.name}** \`${m.tag}\``
+    );
+    const fields: any[] = [];
+    if (compoLine) fields.push({ name: "📊 TH Composition", value: compoLine, inline: false });
+    let buf = "", part = 1;
+    for (const ln of lines) {
+      if (buf.length + ln.length + 1 > 1000) {
+        fields.push({ name: part === 1 ? `Roster (${members.length})` : `Roster (cont. ${part})`, value: buf, inline: false });
+        buf = ln; part++;
+      } else { buf = buf ? `${buf}\n${ln}` : ln; }
+    }
+    if (buf) fields.push({ name: part === 1 ? `Roster (${members.length})` : `Roster (cont. ${part})`, value: buf, inline: false });
+    embeds.push({
+      title: `🏰 ${cl.name} \`${cl.tag}\``,
+      url: clanProfileLink(cl.tag),
+      color: COLOR,
+      thumbnail: cl.badgeUrls?.medium ? { url: cl.badgeUrls.medium } : undefined,
+      fields,
+    });
+  }
+  return { embeds, allowed_mentions: { parse: [] } };
+}
+
+// ---------- /cwl_board ----------
+// Computes a CWL leaderboard by fetching every round war and tallying stars/dest%/attacks/W-L-D per clan.
+export async function buildCwlBoard(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
+  let g: any;
+  try { g = await postCoc({ action: "cwl_group", tag }); } catch (e) {
+    return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
+  }
+  if (!g || g.state === "notInWar" || !g.clans?.length) {
+    return { embeds: [{ title: "🛡️ CWL Board", description: g?.reason ?? `\`${tag}\` is not currently in CWL.`, color: COLOR_GOLD }] };
+  }
+  const clans: any[] = g.clans ?? [];
+  type Stats = { name: string; tag: string; badge?: string; w: number; l: number; d: number; stars: number; dest: number; attacks: number; rounds: number };
+  const stats = new Map<string, Stats>();
+  for (const c of clans) stats.set(c.tag, {
+    name: c.name, tag: c.tag, badge: c.badgeUrls?.medium,
+    w: 0, l: 0, d: 0, stars: 0, dest: 0, attacks: 0, rounds: 0,
+  });
+
+  const rounds: any[] = (g.rounds ?? []).filter((r: any) => (r.warTags ?? []).some((t: string) => t && t !== "#0"));
+  let currentRound = 0;
+  for (let ri = 0; ri < rounds.length; ri++) {
+    const tags = (rounds[ri].warTags ?? []).filter((t: string) => t && t !== "#0");
+    const wars = await Promise.all(tags.map(async (wt: string) => {
+      try { return await postCoc({ action: "cwl_war", tag: wt }); } catch (_e) { return null; }
+    }));
+    let roundActive = false;
+    for (const w of wars as any[]) {
+      if (!w || !w.clan || !w.opponent) continue;
+      if (w.state !== "warEnded") roundActive = true;
+      for (const side of [w.clan, w.opponent] as any[]) {
+        const opp = side === w.clan ? w.opponent : w.clan;
+        const s = stats.get(side.tag); if (!s) continue;
+        s.stars += side.stars ?? 0;
+        s.dest += side.destructionPercentage ?? 0;
+        s.attacks += side.attacks ?? 0;
+        s.rounds += 1;
+        if (w.state === "warEnded") {
+          const sStars = side.stars ?? 0, oStars = opp.stars ?? 0;
+          const sDest = side.destructionPercentage ?? 0, oDest = opp.destructionPercentage ?? 0;
+          if (sStars > oStars || (sStars === oStars && sDest > oDest)) s.w++;
+          else if (sStars < oStars || (sStars === oStars && sDest < oDest)) s.l++;
+          else s.d++;
+        }
+      }
+    }
+    if (roundActive && !currentRound) currentRound = ri + 1;
+  }
+
+  const ranked = Array.from(stats.values()).sort((a, b) =>
+    b.stars - a.stars || b.dest - a.dest || b.w - a.w
+  );
+  const myRank = ranked.findIndex((s) => s.tag === tag) + 1;
+  const myStats = stats.get(tag);
+
+  const rows = ranked.map((s, i) => {
+    const rank = String(i + 1).padStart(2);
+    const name = (s.name.length > 18 ? s.name.slice(0, 17) + "…" : s.name).padEnd(18);
+    const wld = `${s.w}-${s.l}-${s.d}`.padStart(5);
+    const stars = String(s.stars).padStart(3);
+    const dest = `${s.dest.toFixed(1)}%`.padStart(6);
+    const att = String(s.attacks).padStart(3);
+    const marker = s.tag === tag ? "▶" : " ";
+    return `${marker}${rank}  ${name}  ${wld}  ⭐${stars}  ${dest}  🗡️${att}`;
+  }).join("\n");
+  const tableHeader = "  #  Clan                   W-L-D    ⭐    💥%      🗡️";
+  const totalRounds = (g.rounds ?? []).length;
+  const playedRounds = currentRound > 0 ? currentRound : (rounds.length || totalRounds);
+
+  const fields: any[] = [
+    { name: `📋 Standings — Round ${playedRounds}/${totalRounds}`, value: "```\n" + tableHeader + "\n" + rows + "\n```", inline: false },
+  ];
+  if (myStats) {
+    fields.push({
+      name: `📍 Your clan — ${myStats.name}`,
+      value: `Rank **#${myRank}** • ${myStats.w}-${myStats.l}-${myStats.d} • ⭐ **${myStats.stars}** • 💥 **${myStats.dest.toFixed(1)}%** • 🗡️ ${myStats.attacks} attacks`,
+      inline: false,
+    });
+  }
+  const base = {
+    title: `🏆 CWL Leaderboard — ${g.season ?? "current"}`,
+    description: `League group • ${clans.length} clans • Size ${g.teamSize ?? "—"}v${g.teamSize ?? "—"}`,
+    color: COLOR_GOLD,
+    thumbnail: ranked[0]?.badge ? { url: ranked[0].badge } : undefined,
+    fields,
+    footer: { text: "Live from Clash of Clans • Sorted by stars, then destruction" },
+    timestamp: new Date().toISOString(),
+  };
+  return await send(guildId, "cwl_board", base, { season: g.season, tag, rank: myRank });
+}
