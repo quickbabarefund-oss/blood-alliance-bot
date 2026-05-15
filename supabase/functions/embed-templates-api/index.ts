@@ -71,6 +71,23 @@ function familyDashboardPatchFromTemplate(row: Record<string, any>, spacingLines
   return patch;
 }
 
+function templateRowFromFamilyDashboard(guildId: string, dashboard: Record<string, any>, current: Record<string, any> = {}) {
+  return {
+    guild_id: guildId,
+    slot: "family_dashboard",
+    enabled: current.enabled !== false,
+    title: dashboard.title ?? current.title ?? "",
+    description: dashboard.description ?? "",
+    color: typeof dashboard.color === "number" ? dashboard.color : current.color ?? 0x5865F2,
+    footer_text: dashboard.footer_text ?? "",
+    thumbnail_url: dashboard.thumbnail_url ?? "",
+    image_url: dashboard.image_url ?? "",
+    content: current.content ?? "",
+    fields: Array.isArray(current.fields) ? current.fields : [],
+    show_timestamp: !!dashboard.show_timestamp,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const url = new URL(req.url);
