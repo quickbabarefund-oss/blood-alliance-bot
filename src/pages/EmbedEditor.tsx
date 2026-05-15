@@ -87,6 +87,7 @@ export default function EmbedEditor() {
         setTplMap(map);
         setWarClans(j.war_clans ?? []);
         setAnnDefaults(j.announcement_defaults ?? { win: "", lose: "" });
+        setFamilySpacing(typeof j.family_dashboard_spacing === "number" ? j.family_dashboard_spacing : 1);
         if (j.slots?.[0]) setActive(j.slots[0].slot);
       } catch (e: any) {
         setError(e?.message ?? "Failed to load");
