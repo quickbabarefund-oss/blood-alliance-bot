@@ -1108,10 +1108,10 @@ async function handleCocCmd(
     const uid = targetUser ?? caller;
     const links = await fetchUserLinks(uid);
     if (links.length > 1) {
-       // Show public picker; button handler still restricts use to the caller.
+      // Ephemeral picker — only the caller can see it.
       return new Response(JSON.stringify({
         type: RESP_CHANNEL_MSG,
-        data: accountPickerPayload(cmdName, targetUser, links, caller),
+        data: { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 },
       }), { headers: { "Content-Type": "application/json" } });
     }
   }
@@ -1224,10 +1224,15 @@ Deno.serve(async (req) => {
         (async () => {
           try {
             const data = await builder(guildId, { tag, targetUser, caller });
-            // Replace the ephemeral picker with the result (still ephemeral to caller).
+            // Post the result as a normal (public) follow-up message.
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...data, flags: 0 }),
+            });
+            // Collapse the ephemeral picker into a small confirmation only the caller sees.
             await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
               method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: "", components: [], ...data }),
+              body: JSON.stringify({ content: `✅ Used \`${tag}\` for **/${cmdName}**.`, components: [], embeds: [] }),
             });
           } catch (e) {
             console.error("coc pick failed", e);
