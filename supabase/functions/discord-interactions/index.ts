@@ -52,10 +52,17 @@ async function verifyDiscord(req: Request, rawBody: string): Promise<boolean> {
 const PING = 1;
 const APPLICATION_COMMAND = 2;
 const MESSAGE_COMPONENT = 3;
+const APPLICATION_COMMAND_AUTOCOMPLETE = 4;
 const RESP_PONG = 1;
 const RESP_CHANNEL_MSG = 4;
 const RESP_DEFERRED = 5;
 const RESP_UPDATE_MESSAGE = 7;
+const RESP_AUTOCOMPLETE = 8;
+
+const COC_AUTOCOMPLETE_CMDS = new Set([
+  "clan_info","current_war","war_log","clan_members",
+  "cwl","cwl_roster","cwl_board","capital_raids","compo",
+]);
 
 const COLOR_GREEN = 0x57F287;
 const COLOR_RED = 0xED4245;
@@ -1166,12 +1173,41 @@ Deno.serve(async (req) => {
     ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e));
   }
 
+  // Autocomplete: search Family clans for /clan_info, /compo, etc.
+  if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE) {
+    try {
+      const cmdName = interaction.data?.name ?? "";
+      const focused = (interaction.data?.options ?? []).find((o: any) => o.focused);
+      if (!COC_AUTOCOMPLETE_CMDS.has(cmdName) || !focused || focused.name !== "tag") {
+        return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
+      }
+      const q = String(focused.value ?? "").trim().toLowerCase().replace(/^#/, "");
+      const guildId = interaction.guild_id ?? "";
+      const sb = adminClient();
+      const { data: rows } = await sb.from("family_clans")
+        .select("clan_tag,clan_name,category_id,position")
+        .eq("guild_id", guildId)
+        .order("position")
+        .limit(200);
+      const list = (rows ?? []) as any[];
+      const filtered = q
+        ? list.filter((r) => (r.clan_name ?? "").toLowerCase().includes(q) || (r.clan_tag ?? "").toLowerCase().replace(/^#/, "").includes(q))
+        : list;
+      const choices = filtered.slice(0, 25).map((r) => {
+        const tag = String(r.clan_tag).startsWith("#") ? r.clan_tag : `#${r.clan_tag}`;
+        const name = (r.clan_name ?? "").trim() || tag;
+        return { name: `${name} (${tag})`.slice(0, 100), value: tag };
+      });
+      return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices } }), { headers: { "Content-Type": "application/json" } });
+    } catch (e) {
+      console.error("autocomplete error", e);
+      return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
+    }
+  }
+
   if (interaction.type === MESSAGE_COMPONENT) {
     try {
       const cid: string = interaction.data?.custom_id ?? "";
-      // Formats:
-      //   lb:clan:<GUILD>:<TAG>:first|prev:<n>|next:<n>|last
-      //   lb:global:<GUILD>:first|prev:<n>|next:<n>|last
       const VERY_LARGE = 1_000_000;
       if (cid.startsWith("lb:") && !cid.endsWith(":noop")) {
         const parts = cid.split(":");
@@ -1225,21 +1261,17 @@ Deno.serve(async (req) => {
           try {
             const data = await builder(guildId, { tag, targetUser, caller });
             // Post the result as a normal (public) follow-up message.
+            // Leave the ephemeral picker untouched so the caller can pick again.
             await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ ...data, flags: 0 }),
             });
-            // Collapse the ephemeral picker into a small confirmation only the caller sees.
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
-              method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `✅ Used \`${tag}\` for **/${cmdName}**.`, components: [], embeds: [] }),
-            });
           } catch (e) {
             console.error("coc pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
-              method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, components: [], embeds: [] }),
-            });
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/followup`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
+            }).catch(() => {});
           }
         })();
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
