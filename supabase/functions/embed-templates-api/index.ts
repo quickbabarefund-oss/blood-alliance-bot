@@ -127,6 +127,22 @@ Deno.serve(async (req) => {
         }
         return json({ ok: true, sync_warning: syncWarn });
       }
+
+      if (slot === "clan_leaderboard") {
+        let syncWarn: string | undefined;
+        try {
+          const { refreshGuildLeaderboardMessages } = await import("../_shared/leaderboard.ts");
+          const sync = await refreshGuildLeaderboardMessages(guildId);
+          if (!sync.ok) {
+            syncWarn = sync.error;
+            console.error("leaderboard sync after edit failed", sync.error);
+          }
+        } catch (e) {
+          syncWarn = e instanceof Error ? e.message : String(e);
+          console.error("import/sync leaderboard", e);
+        }
+        return json({ ok: true, sync_warning: syncWarn });
+      }
       return json({ ok: true });
     }
 

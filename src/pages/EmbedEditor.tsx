@@ -113,7 +113,7 @@ export default function EmbedEditor() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       if (j.sync_warning) {
-        toast({ title: "Saved (dashboard not refreshed)", description: j.sync_warning, variant: "destructive" });
+        toast({ title: "Saved (Discord message not refreshed)", description: j.sync_warning, variant: "destructive" });
       } else {
         toast({ title: "Saved", description: `Template for ${active} updated.` });
       }
