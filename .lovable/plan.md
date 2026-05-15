@@ -1,106 +1,24 @@
-## Goals
+## Plan
 
-1. Rename all "ClashChamps / cc" references to **ChocolateClash (CC)** everywhere in code, embeds, and UI labels.
-2. Redesign the **Clan Detail embed** (the one shown when a user picks a clan from the Family Dashboard dropdown) per the attached screenshot.
-3. Expose **placeholder variables** in the Embed Editor UI so users know what `{name}`, `{tag}`, etc. they can use per slot.
-4. Curate a richer **emoji palette** in the Embed Editor builder.
+1. **Make the Family Dashboard builder UI-first**
+   - Stop depending on the older `family_dashboards` row for title/description/color when a `family_dashboard` UI template exists.
+   - Build the Discord payload directly from the saved UI template plus the live category/clan fields.
+   - Trim leading blank lines in saved title/description/content before sending to Discord, so the visible embed doesn’t look unchanged because of hidden whitespace.
 
----
+2. **Make force sync return proof, not only `ok: true`**
+   - Add a small response payload with the refreshed guild id, message id, title, description preview, and `updated_at`.
+   - If Discord PATCH fails, surface the real Discord status/body in the UI toast instead of a generic success/warning.
 
-## 1. Rename CC → ChocolateClash
+3. **Fix the editor save/force-sync flow**
+   - When clicking **Force sync now**, first save the current open UI changes if they are unsaved, then force refresh Discord.
+   - This resolves the “0 changes” case where Discord is synced from the last saved template while edits are still only in the browser.
 
-- Memory note: CC = ChocolateClash (not ClashChamps). Save to `mem://index.md` Core.
-- Search/replace across:
-  - `supabase/functions/_shared/coc_commands.ts` — link labels for `/clan_info`, `/player_info` embeds.
-  - `supabase/functions/_shared/embed_templates.ts` — slot labels if any mention CC.
-  - `src/pages/EmbedEditor.tsx` — any helper text.
-- Link URLs stay the same (`cc.fwafarm.com/cc_n/clan.php?tag=...` and `member.php?tag=...`) but **link text** becomes `ChocolateClash`.
+4. **Deploy and validate**
+   - Redeploy `embed-templates-api` and any shared-function consumers needed.
+   - Test the edge function directly with the active editor token.
+   - Verify the database row and function response show the same values as the UI-saved template.
 
----
+## Technical details
 
-## 2. Clan Detail Embed Redesign (`buildClanDetailEmbed` in `_shared/family.ts`)
-
-Match the attached screenshot exactly:
-
-```text
-[Clan Badge as author icon] **Clan Name**         [Large badge as thumbnail]
-{clan.description — full, up to ~300 chars}
-
-🏷️ Tag           👥 Members        🏆 Level
-#CYQVL002        50/50             30
-
-⚔️ War League    🛡️ Trophies       🔥 Win Streak
-Gold League I    80350             1
-
-👑 Leader
-Darkness #GYYPRRP09     (or @mention if linked)
-
-🥈 Co-Leaders — 6
-• ⚡ FlasH ⚡  #R9ULP9VQ
-• kylian mbapps  @BLOOD | MESSI
-• Clasher  #PU9GYRQP9
-• Büd'dha  #L9YVVJ8JJ
-• MADARA  @Buddha
-• LEGION 9  #GLGCCC8RJ
-
-🎖️ Elders
-14
-
-[Open in Game](link) • [ChocolateClash](cc link)
-
-Live from Clash of Clans • {timestamp}
-```
-
-Implementation changes in `buildClanDetailEmbed`:
-- Set `embed.author = { name: clan.name, icon_url: badgeUrls.small }` and **keep title empty** OR use `title: clan.name` with author removed — pick title = clan name, thumbnail = large badge (matches screenshot).
-- Use `description` to hold the clan description (currently truncated at 300 — keep).
-- Append a footer-of-description action line with two hyperlinks:
-  - `[🎮 Open in Game](https://link.clashofclans.com/en?action=OpenClanProfile&tag=<URLENCODED>)`
-  - `[🍫 ChocolateClash](https://cc.fwafarm.com/cc_n/clan.php?tag=<TAG_NO_HASH>)`
-- Field order/icons exactly as above. Use new emojis: 🏷️ 👥 🏆 ⚔️ 🛡️ 🔥 👑 🥈 🎖️.
-- Keep existing linked-user @mention logic for leader & co-leaders.
-- Pass through `applyTemplate(guildId, "clan_info", ...)` so users can still override via Embed Editor (currently this embed bypasses template — wire it up).
-
----
-
-## 3. Placeholders in Embed Editor UI
-
-In `src/pages/EmbedEditor.tsx`:
-- Add a per-slot **"Available placeholders"** panel above the editor fields, listing the `{var}` tokens supported for the currently selected slot, each as a click-to-copy chip.
-- Source the list from a new constant `SLOT_PLACEHOLDERS` (mirrored both in frontend and `_shared/embed_templates.ts` so backend can keep using the same vars):
-  - `family_dashboard`: none today (no interpolation passed).
-  - `war_started` / `war_win` / `war_lose` / `war_reminder`: `{clan}`, `{opponent}`, `{stars}`, `{opp_stars}`, `{destruction}`, `{opp_destruction}`, `{team_size}`, `{end_time}`, `{result}`.
-  - `clan_leaderboard`: `{clan}`, `{tag}`, `{month}`.
-  - `player_info`: `{name}`, `{tag}`, `{th}`, `{xp}`, `{trophies}`, `{war_stars}`, `{donations}`, `{league}`, `{clan}`, `{role}`.
-  - `clan_info`: `{name}`, `{tag}`, `{level}`, `{members}`, `{league}`, `{trophies}`, `{streak}`, `{leader}`, `{description}`.
-  - `current_war`: `{clan}`, `{opponent}`, `{state}`, `{stars}`, `{opp_stars}`, `{destruction}`, `{end_time}`, `{team_size}`.
-  - `war_log`: `{clan}`, `{recent}`.
-  - `clan_members`: `{clan}`, `{count}`, `{page}`.
-  - `cwl`: `{clan}`, `{round}`, `{league}`.
-  - `capital_raids`: `{clan}`, `{capital_gold}`, `{districts}`, `{top_attacker}`.
-- Update `coc_commands.ts` handlers to pass `vars` matching the placeholders above into `applyTemplate`.
-
----
-
-## 4. Curated Emoji Picker in Embed Editor
-
-In `src/pages/EmbedEditor.tsx`:
-- Add a small emoji grid popover next to Title / Description / Field Name / Field Value inputs.
-- Curated set (themed for CoC bot): 🏰 🛡️ ⚔️ 🏆 🔥 👑 🥈 🎖️ 🏷️ 👥 🎮 🍫 ⭐ 💥 🎯 📊 📈 📉 🟢 🔴 🟡 ✅ ❌ ⏰ 🕒 🗡️ 🪖 💀 ☠️ 🧱 💣 ⚡ ✨ 💎 📜 📣 📢 🔔 ❤️ 💙 💚.
-- Click to insert at caret. No external deps; keep local array.
-
----
-
-## Files to change
-
-- `supabase/functions/_shared/family.ts` — redesign `buildClanDetailEmbed`, add ChocolateClash + Open in Game hyperlinks, hook `applyTemplate("clan_info", ...)` (or a new slot `clan_detail`).
-- `supabase/functions/_shared/coc_commands.ts` — rename CC → ChocolateClash, pass `vars` for each command.
-- `supabase/functions/_shared/embed_templates.ts` — export `SLOT_PLACEHOLDERS` map.
-- `src/pages/EmbedEditor.tsx` — placeholder chips + emoji picker + CC label fix.
-- `mem://index.md` (new) — note CC = ChocolateClash.
-
-## Deploy
-
-- Auto-deploys: `discord-interactions`, `embed-templates-api`.
-- No DB migration needed.
-- Tell user to refresh `/embed_editor` page and re-run `/family_clan_dashboard`-related interactions to see the new clan detail layout.
+- Main files: `src/pages/EmbedEditor.tsx`, `supabase/functions/embed-templates-api/index.ts`, `supabase/functions/_shared/family.ts`, possibly `supabase/functions/_shared/embed_templates.ts`.
+- Root issue found: database values are being updated, but the Discord payload path still mixes legacy dashboard config with UI template config, and force sync does not save unsaved browser edits before refreshing.
