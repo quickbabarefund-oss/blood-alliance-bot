@@ -112,7 +112,11 @@ export default function EmbedEditor() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
-      toast({ title: "Saved", description: `Template for ${active} updated.` });
+      if (j.sync_warning) {
+        toast({ title: "Saved (dashboard not refreshed)", description: j.sync_warning, variant: "destructive" });
+      } else {
+        toast({ title: "Saved", description: `Template for ${active} updated.` });
+      }
     } catch (e: any) {
       toast({ title: "Save failed", description: e?.message ?? "error", variant: "destructive" });
     } finally { setSaving(false); }
