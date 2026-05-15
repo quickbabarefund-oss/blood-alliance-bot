@@ -115,8 +115,9 @@ Deno.serve(async (req) => {
         }
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
-          syncDashboardMessage(guildId).catch((e) => console.error("sync after edit", e));
-        } catch (e) { console.error("import family", e); }
+          const sync = await syncDashboardMessage(guildId);
+          if (!sync.ok) console.error("sync after edit failed", sync.error);
+        } catch (e) { console.error("import/sync family", e); }
       }
       return json({ ok: true });
     }
