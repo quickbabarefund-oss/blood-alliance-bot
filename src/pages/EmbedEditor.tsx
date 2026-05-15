@@ -231,6 +231,23 @@ export default function EmbedEditor() {
             <Textarea rows={2} value={tpl.content ?? ""} onChange={(e) => update({ content: e.target.value })} />
           </Field>
 
+          {active === "family_dashboard" && (
+            <Field label="Spacing between description & categories">
+              <div className="flex items-center gap-2">
+                {[0, 1, 2].map((n) => (
+                  <Button key={n} type="button" size="sm"
+                    variant={familySpacing === n ? "default" : "outline"}
+                    onClick={() => setFamilySpacing(n)}>
+                    {n === 0 ? "None" : n === 1 ? "1 line" : "2 lines"}
+                  </Button>
+                ))}
+                <span className="text-xs text-muted-foreground">
+                  Controls blank lines between description→first category and between categories.
+                </span>
+              </div>
+            </Field>
+          )}
+
           <div>
             <div className="mb-2 flex items-center justify-between">
               <Label>Fields ({tpl.fields.length}/25)</Label>
