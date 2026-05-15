@@ -308,6 +308,10 @@ export default function EmbedEditor() {
             <Button onClick={save} disabled={saving}>
               <Save className="mr-1 h-4 w-4" /> {saving ? "Saving…" : "Save"}
             </Button>
+            <Button variant="secondary" onClick={forceSyncNow} disabled={saving || syncing}>
+              <RefreshCw className={`mr-1 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing…" : "Force sync now"}
+            </Button>
             <Button variant="outline" onClick={reset} disabled={saving}>
               <RotateCcw className="mr-1 h-4 w-4" /> Reset to default
             </Button>
