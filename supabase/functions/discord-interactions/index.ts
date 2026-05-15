@@ -1108,10 +1108,10 @@ async function handleCocCmd(
     const uid = targetUser ?? caller;
     const links = await fetchUserLinks(uid);
     if (links.length > 1) {
-       // Show public picker; button handler still restricts use to the caller.
+      // Ephemeral picker — only the caller can see it.
       return new Response(JSON.stringify({
         type: RESP_CHANNEL_MSG,
-        data: accountPickerPayload(cmdName, targetUser, links, caller),
+        data: { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 },
       }), { headers: { "Content-Type": "application/json" } });
     }
   }
