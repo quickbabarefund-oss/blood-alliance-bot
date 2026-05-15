@@ -218,8 +218,9 @@ Deno.serve(async (req) => {
             .update(familyDashboardPatchFromTemplate(row, body.spacing_lines))
             .eq("guild_id", guildId);
         } else if (typeof body.spacing_lines === "number") {
+          const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
           await sb.from("family_dashboards")
-            .update(familyDashboardPatchFromTemplate({}, body.spacing_lines))
+            .update({ spacing_lines: sp, updated_at: new Date().toISOString() })
             .eq("guild_id", guildId);
         }
 
