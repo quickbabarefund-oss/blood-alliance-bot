@@ -159,6 +159,42 @@ Deno.serve(async (req) => {
       const guildId = await resolveToken(token);
       if (!guildId) return json({ error: "invalid or expired token" }, 401);
       const action = String(body.action ?? "");
+
+      if (action === "force_sync") {
+        const warnings: string[] = [];
+        try {
+          const { data: tpl } = await sb.from("embed_templates")
+            .select("title,description,color,footer_text,show_timestamp,thumbnail_url,image_url")
+            .eq("guild_id", guildId).eq("slot", "family_dashboard").maybeSingle();
+          if (tpl) {
+            const patch: Record<string, any> = {
+              updated_at: new Date().toISOString(),
+              description: tpl.description ?? null,
+              footer_text: tpl.footer_text ?? null,
+              show_timestamp: !!tpl.show_timestamp,
+              thumbnail_url: tpl.thumbnail_url ?? null,
+              image_url: tpl.image_url ?? null,
+            };
+            if (tpl.title) patch.title = tpl.title;
+            if (typeof tpl.color === "number") patch.color = tpl.color;
+            await sb.from("family_dashboards").update(patch).eq("guild_id", guildId);
+          }
+          const { syncDashboardMessage } = await import("../_shared/family.ts");
+          const sync = await syncDashboardMessage(guildId);
+          if (!sync.ok && sync.error) warnings.push(`Family dashboard: ${sync.error}`);
+        } catch (e) {
+          warnings.push(`Family dashboard: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        try {
+          const { refreshGuildLeaderboardMessages } = await import("../_shared/leaderboard.ts");
+          const sync = await refreshGuildLeaderboardMessages(guildId);
+          if (!sync.ok && sync.error) warnings.push(`Donation leaderboards: ${sync.error}`);
+        } catch (e) {
+          warnings.push(`Donation leaderboards: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        return json({ ok: true, sync_warning: warnings.length ? warnings.join("; ") : undefined });
+      }
+
       const clanTag = String(body.clan_tag ?? "").toUpperCase();
       if (!clanTag) return json({ error: "clan_tag required" }, 400);
 

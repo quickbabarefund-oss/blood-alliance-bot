@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Save, RotateCcw, Send, Megaphone } from "lucide-react";
+import { Plus, Trash2, Save, RotateCcw, Send, Megaphone, RefreshCw } from "lucide-react";
 
 const API = `https://oumdgsdoehqbsyudkwzm.supabase.co/functions/v1/embed-templates-api`;
 
@@ -63,6 +63,7 @@ export default function EmbedEditor() {
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [warClans, setWarClans] = useState<WarClan[]>([]);
   const [annDefaults, setAnnDefaults] = useState<{ win: string; lose: string }>({ win: "", lose: "" });
   const [familySpacing, setFamilySpacing] = useState<number>(1);
@@ -137,6 +138,25 @@ export default function EmbedEditor() {
     } catch (e: any) {
       toast({ title: "Reset failed", description: e?.message ?? "error", variant: "destructive" });
     } finally { setSaving(false); }
+  };
+
+  const forceSyncNow = async () => {
+    setSyncing(true);
+    try {
+      const r = await fetch(API, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, action: "force_sync" }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      if (j.sync_warning) {
+        toast({ title: "Force sync completed with warnings", description: j.sync_warning, variant: "destructive" });
+      } else {
+        toast({ title: "Force sync complete", description: "Discord embeds refreshed for this server." });
+      }
+    } catch (e: any) {
+      toast({ title: "Force sync failed", description: e?.message ?? "error", variant: "destructive" });
+    } finally { setSyncing(false); }
   };
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
@@ -287,6 +307,10 @@ export default function EmbedEditor() {
           <div className="flex gap-2 pt-2">
             <Button onClick={save} disabled={saving}>
               <Save className="mr-1 h-4 w-4" /> {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button variant="secondary" onClick={forceSyncNow} disabled={saving || syncing}>
+              <RefreshCw className={`mr-1 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing…" : "Force sync now"}
             </Button>
             <Button variant="outline" onClick={reset} disabled={saving}>
               <RotateCcw className="mr-1 h-4 w-4" /> Reset to default
