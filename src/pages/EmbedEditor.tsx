@@ -279,6 +279,7 @@ export default function EmbedEditor() {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
