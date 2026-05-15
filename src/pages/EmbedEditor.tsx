@@ -65,6 +65,7 @@ export default function EmbedEditor() {
   const [saving, setSaving] = useState(false);
   const [warClans, setWarClans] = useState<WarClan[]>([]);
   const [annDefaults, setAnnDefaults] = useState<{ win: string; lose: string }>({ win: "", lose: "" });
+  const [familySpacing, setFamilySpacing] = useState<number>(1);
   // "announcements" is a synthetic tab — handled separately from embed slots
   const isAnnouncementsTab = active === "__announcements__";
 
