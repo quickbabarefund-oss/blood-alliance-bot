@@ -107,12 +107,19 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       if (slot === "family_dashboard") {
+        const dashboardPatch: Record<string, any> = { updated_at: new Date().toISOString() };
+        if (row.title) dashboardPatch.title = row.title;
+        dashboardPatch.description = row.description;
+        if (typeof row.color === "number") dashboardPatch.color = row.color;
+        dashboardPatch.footer_text = row.footer_text;
+        dashboardPatch.show_timestamp = row.show_timestamp;
+        dashboardPatch.thumbnail_url = row.thumbnail_url;
+        dashboardPatch.image_url = row.image_url;
         if (typeof body.spacing_lines === "number") {
           const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
-          await sb.from("family_dashboards")
-            .update({ spacing_lines: sp, updated_at: new Date().toISOString() })
-            .eq("guild_id", guildId);
+          dashboardPatch.spacing_lines = sp;
         }
+        await sb.from("family_dashboards").update(dashboardPatch).eq("guild_id", guildId);
         let syncWarn: string | undefined;
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
