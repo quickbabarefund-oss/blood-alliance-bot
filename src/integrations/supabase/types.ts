@@ -313,6 +313,7 @@ export type Database = {
           image_url: string | null
           message_id: string | null
           show_timestamp: boolean
+          spacing_lines: number
           thumbnail_url: string | null
           title: string
           updated_at: string
@@ -328,6 +329,7 @@ export type Database = {
           image_url?: string | null
           message_id?: string | null
           show_timestamp?: boolean
+          spacing_lines?: number
           thumbnail_url?: string | null
           title?: string
           updated_at?: string
@@ -343,6 +345,7 @@ export type Database = {
           image_url?: string | null
           message_id?: string | null
           show_timestamp?: boolean
+          spacing_lines?: number
           thumbnail_url?: string | null
           title?: string
           updated_at?: string
