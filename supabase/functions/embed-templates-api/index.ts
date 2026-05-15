@@ -43,6 +43,7 @@ async function loadWarClans(guildId: string) {
 
 const WIN_DEFAULT = "🏆 {ping} — We're going for the **WIN** vs **{opponent}** ({opp_tag})! Mirror first attack 3⭐, ≥2⭐ in first 16h, 3⭐ in last 8h.";
 const LOSE_DEFAULT = "🏳️ {ping} — We're **LOSING** vs **{opponent}** ({opp_tag}). Mirror first attack 2⭐, 1⭐ first 16h, 2⭐ last 8h. No extras.";
+const FAMILY_DASHBOARD_DEFAULT_TITLE = "🏛️ Family Clan Dashboard";
 
 function renderAnnouncement(tpl: string, clanName: string, clanTag: string, ping: string) {
   return tpl
@@ -51,6 +52,23 @@ function renderAnnouncement(tpl: string, clanName: string, clanTag: string, ping
     .replaceAll("{our}", clanName || clanTag)
     .replaceAll("{our_tag}", clanTag)
     .replaceAll("{ping}", ping);
+}
+
+function familyDashboardPatchFromTemplate(row: Record<string, any>, spacingLines?: unknown) {
+  const patch: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+    title: row.title || FAMILY_DASHBOARD_DEFAULT_TITLE,
+    description: row.description ?? null,
+    footer_text: row.footer_text ?? null,
+    show_timestamp: !!row.show_timestamp,
+    thumbnail_url: row.thumbnail_url ?? null,
+    image_url: row.image_url ?? null,
+  };
+  patch.color = typeof row.color === "number" ? row.color : 0x5865F2;
+  if (typeof spacingLines === "number") {
+    patch.spacing_lines = Math.max(0, Math.min(2, Math.floor(spacingLines)));
+  }
+  return patch;
 }
 
 Deno.serve(async (req) => {
