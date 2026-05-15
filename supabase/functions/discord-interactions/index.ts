@@ -1284,6 +1284,8 @@ Deno.serve(async (req) => {
         case "war_log": return await handleCocCmd(interaction, buildWarLog);
         case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
         case "cwl": return await handleCocCmd(interaction, buildCwl);
+        case "cwl_roster": return await handleCocCmd(interaction, buildCwlRoster);
+        case "cwl_board": return await handleCocCmd(interaction, buildCwlBoard);
         case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
         case "compo": return await handleCocCmd(interaction, buildCompo);
         default: return reply(`Unknown command: ${name}`);
