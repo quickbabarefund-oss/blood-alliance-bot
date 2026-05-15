@@ -1046,6 +1046,8 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   war_log: buildWarLog,
   clan_members: buildClanMembers,
   cwl: buildCwl,
+  cwl_roster: buildCwlRoster,
+  cwl_board: buildCwlBoard,
   capital_raids: buildCapitalRaids,
   compo: buildCompo,
 };
