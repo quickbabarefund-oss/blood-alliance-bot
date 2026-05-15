@@ -68,12 +68,7 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
 
   const emoji = c.category_emoji || "🏰";
   const lineTpl = c.clan_line_format || "`{i}.` **{name}** `{tag}`";
-  const SEP = { name: "\u200b", value: "\u200b", inline: false };
-
-  // Blank line between description and first category
-  if (categories.length && c.description) fields.push({ ...SEP });
-
-  categories.forEach((cat, idx) => {
+  categories.forEach((cat) => {
     const cs = clans.filter((x) => x.category_id === cat.id);
     const value = cs.length
       ? cs.map((cl, i) => formatLine(lineTpl, {
@@ -81,8 +76,6 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
         })).join("\n")
       : "_No clans yet_";
     fields.push({ name: `${emoji} ${cat.name} — ${cs.length}`, value, inline: false });
-    // Blank line between categories
-    if (idx < categories.length - 1) fields.push({ ...SEP });
   });
 
   const components: any[] = [];
