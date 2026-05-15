@@ -52,10 +52,17 @@ async function verifyDiscord(req: Request, rawBody: string): Promise<boolean> {
 const PING = 1;
 const APPLICATION_COMMAND = 2;
 const MESSAGE_COMPONENT = 3;
+const APPLICATION_COMMAND_AUTOCOMPLETE = 4;
 const RESP_PONG = 1;
 const RESP_CHANNEL_MSG = 4;
 const RESP_DEFERRED = 5;
 const RESP_UPDATE_MESSAGE = 7;
+const RESP_AUTOCOMPLETE = 8;
+
+const COC_AUTOCOMPLETE_CMDS = new Set([
+  "clan_info","current_war","war_log","clan_members",
+  "cwl","cwl_roster","cwl_board","capital_raids","compo",
+]);
 
 const COLOR_GREEN = 0x57F287;
 const COLOR_RED = 0xED4245;
