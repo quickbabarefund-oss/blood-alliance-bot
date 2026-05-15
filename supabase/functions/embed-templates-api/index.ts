@@ -113,10 +113,19 @@ Deno.serve(async (req) => {
             .update({ spacing_lines: sp, updated_at: new Date().toISOString() })
             .eq("guild_id", guildId);
         }
+        let syncWarn: string | undefined;
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
-          syncDashboardMessage(guildId).catch((e) => console.error("sync after edit", e));
-        } catch (e) { console.error("import family", e); }
+          const sync = await syncDashboardMessage(guildId);
+          if (!sync.ok) {
+            syncWarn = sync.error;
+            console.error("sync after edit failed", sync.error);
+          }
+        } catch (e) {
+          syncWarn = e instanceof Error ? e.message : String(e);
+          console.error("import/sync family", e);
+        }
+        return json({ ok: true, sync_warning: syncWarn });
       }
       return json({ ok: true });
     }
