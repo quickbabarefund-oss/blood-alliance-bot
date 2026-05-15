@@ -143,16 +143,27 @@ export default function EmbedEditor() {
   const forceSyncNow = async () => {
     setSyncing(true);
     try {
+      const body: any = { token, action: "force_sync" };
+      // Send the editor's current values so "Force sync" pushes what the user
+      // sees right now, even if they haven't clicked Save yet.
+      if (active === "family_dashboard" && tplMap.family_dashboard) {
+        body.pending_template = tplMap.family_dashboard;
+        body.spacing_lines = familySpacing;
+      }
       const r = await fetch(API, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, action: "force_sync" }),
+        body: JSON.stringify(body),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
+      const proof = j.proof;
+      const proofMsg = proof?.message_id
+        ? `Discord message ${proof.message_id} updated. Title: ${proof.title ?? "—"}`
+        : "Discord embeds refreshed for this server.";
       if (j.sync_warning) {
-        toast({ title: "Force sync completed with warnings", description: j.sync_warning, variant: "destructive" });
+        toast({ title: "Force sync had issues", description: j.sync_warning, variant: "destructive" });
       } else {
-        toast({ title: "Force sync complete", description: "Discord embeds refreshed for this server." });
+        toast({ title: "Force sync complete", description: proofMsg });
       }
     } catch (e: any) {
       toast({ title: "Force sync failed", description: e?.message ?? "error", variant: "destructive" });

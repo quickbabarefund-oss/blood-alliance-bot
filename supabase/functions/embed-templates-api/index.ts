@@ -162,6 +162,34 @@ Deno.serve(async (req) => {
 
       if (action === "force_sync") {
         const warnings: string[] = [];
+        let proof: any = undefined;
+
+        // Optionally accept the editor's current unsaved template+spacing so that
+        // "Force sync" always pushes what the user sees in the UI right now.
+        const pending = body.pending_template;
+        if (pending && typeof pending === "object" && pending.slot === "family_dashboard") {
+          const row = {
+            guild_id: guildId,
+            slot: "family_dashboard",
+            enabled: pending.enabled !== false,
+            title: nullStr(pending.title),
+            description: nullStr(pending.description),
+            color: typeof pending.color === "number" ? pending.color : null,
+            footer_text: nullStr(pending.footer_text),
+            thumbnail_url: nullStr(pending.thumbnail_url),
+            image_url: nullStr(pending.image_url),
+            content: nullStr(pending.content),
+            fields: Array.isArray(pending.fields) ? pending.fields.slice(0, 25) : [],
+            show_timestamp: !!pending.show_timestamp,
+            updated_at: new Date().toISOString(),
+          };
+          await sb.from("embed_templates").upsert(row, { onConflict: "guild_id,slot" });
+        }
+        if (typeof body.spacing_lines === "number") {
+          const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
+          await sb.from("family_dashboards").update({ spacing_lines: sp, updated_at: new Date().toISOString() }).eq("guild_id", guildId);
+        }
+
         try {
           const { data: tpl } = await sb.from("embed_templates")
             .select("title,description,color,footer_text,show_timestamp,thumbnail_url,image_url")
@@ -181,6 +209,12 @@ Deno.serve(async (req) => {
           }
           const { syncDashboardMessage } = await import("../_shared/family.ts");
           const sync = await syncDashboardMessage(guildId);
+          proof = {
+            message_id: sync.message_id,
+            channel_id: sync.channel_id,
+            title: sync.title,
+            description_preview: sync.description_preview,
+          };
           if (!sync.ok && sync.error) warnings.push(`Family dashboard: ${sync.error}`);
         } catch (e) {
           warnings.push(`Family dashboard: ${e instanceof Error ? e.message : String(e)}`);
@@ -192,7 +226,11 @@ Deno.serve(async (req) => {
         } catch (e) {
           warnings.push(`Donation leaderboards: ${e instanceof Error ? e.message : String(e)}`);
         }
-        return json({ ok: true, sync_warning: warnings.length ? warnings.join("; ") : undefined });
+        return json({
+          ok: warnings.length === 0,
+          sync_warning: warnings.length ? warnings.join("; ") : undefined,
+          proof,
+        });
       }
 
       const clanTag = String(body.clan_tag ?? "").toUpperCase();
