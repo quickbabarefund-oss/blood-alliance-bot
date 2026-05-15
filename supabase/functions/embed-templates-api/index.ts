@@ -1,9 +1,14 @@
-// Token-authenticated CRUD for embed_templates.
-// GET  ?token=...           -> { guild_id, slots: [{slot,label}], templates: { slot: {...} } }
-// POST { token, slot, ...embedFields } -> upsert
+// Token-authenticated CRUD for embed_templates + per-clan war announcements.
+// GET    ?token=...                               -> { guild_id, slots, templates, war_clans }
+// POST   { token, slot, ...embedFields }          -> upsert template
+// DELETE { token, slot }                          -> reset template
+// PATCH  { token, action: "save_announcement", clan_tag, win_announcement?, lose_announcement? }
+// PATCH  { token, action: "test_announcement",  clan_tag, outcome, template }
 import { corsHeaders } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/leaderboard.ts";
 import { EMBED_SLOTS, SLOT_PLACEHOLDERS, SLOT_PLACEHOLDER_DESCRIPTIONS } from "../_shared/embed_templates.ts";
+
+const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 
 async function resolveToken(token: string): Promise<string | null> {
   if (!token || token.length < 10) return null;
@@ -12,6 +17,40 @@ async function resolveToken(token: string): Promise<string | null> {
   if (!data) return null;
   if (new Date(data.expires_at).getTime() < Date.now()) return null;
   return data.guild_id as string;
+}
+
+// Pull war-tracked clans for guild. Joins clan_name from `clans` if known.
+async function loadWarClans(guildId: string) {
+  const sb = adminClient();
+  const { data: cfgs } = await sb.from("war_track_config")
+    .select("clan_tag,win_announcement,lose_announcement,mail_channel_id,mail_ping_role_id")
+    .eq("guild_id", guildId);
+  const list = (cfgs ?? []) as any[];
+  if (!list.length) return [];
+  const tags = list.map((c) => c.clan_tag);
+  const { data: clans } = await sb.from("clans").select("tag,name").in("tag", tags);
+  const nameMap = new Map<string, string>();
+  for (const c of (clans ?? []) as any[]) nameMap.set(c.tag, c.name);
+  return list.map((c) => ({
+    clan_tag: c.clan_tag,
+    clan_name: nameMap.get(c.clan_tag) ?? "",
+    win_announcement: c.win_announcement ?? null,
+    lose_announcement: c.lose_announcement ?? null,
+    mail_channel_id: c.mail_channel_id ?? null,
+    mail_ping_role_id: c.mail_ping_role_id ?? null,
+  }));
+}
+
+const WIN_DEFAULT = "🏆 {ping} — We're going for the **WIN** vs **{opponent}** ({opp_tag})! Mirror first attack 3⭐, ≥2⭐ in first 16h, 3⭐ in last 8h.";
+const LOSE_DEFAULT = "🏳️ {ping} — We're **LOSING** vs **{opponent}** ({opp_tag}). Mirror first attack 2⭐, 1⭐ first 16h, 2⭐ last 8h. No extras.";
+
+function renderAnnouncement(tpl: string, clanName: string, clanTag: string, ping: string) {
+  return tpl
+    .replaceAll("{opponent}", "Sample Enemy Clan")
+    .replaceAll("{opp_tag}", "#OPPTAG")
+    .replaceAll("{our}", clanName || clanTag)
+    .replaceAll("{our_tag}", clanTag)
+    .replaceAll("{ping}", ping);
 }
 
 Deno.serve(async (req) => {
@@ -27,9 +66,15 @@ Deno.serve(async (req) => {
       const { data } = await sb.from("embed_templates").select("*").eq("guild_id", guildId);
       const map: Record<string, any> = {};
       for (const r of data ?? []) map[(r as any).slot] = r;
-      // Also include guild name if we have one
       const { data: g } = await sb.from("guilds").select("name").eq("guild_id", guildId).maybeSingle();
-      return json({ guild_id: guildId, guild_name: g?.name ?? null, slots: EMBED_SLOTS, placeholders: SLOT_PLACEHOLDERS, placeholder_descriptions: SLOT_PLACEHOLDER_DESCRIPTIONS, templates: map });
+      const war_clans = await loadWarClans(guildId);
+      return json({
+        guild_id: guildId, guild_name: g?.name ?? null,
+        slots: EMBED_SLOTS, placeholders: SLOT_PLACEHOLDERS, placeholder_descriptions: SLOT_PLACEHOLDER_DESCRIPTIONS,
+        templates: map,
+        war_clans,
+        announcement_defaults: { win: WIN_DEFAULT, lose: LOSE_DEFAULT },
+      });
     }
 
     if (req.method === "POST") {
@@ -58,7 +103,6 @@ Deno.serve(async (req) => {
       const { error } = await sb.from("embed_templates").upsert(row, { onConflict: "guild_id,slot" });
       if (error) return json({ error: error.message }, 500);
 
-      // If family_dashboard updated, push to Discord
       if (slot === "family_dashboard") {
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
@@ -66,6 +110,54 @@ Deno.serve(async (req) => {
         } catch (e) { console.error("import family", e); }
       }
       return json({ ok: true });
+    }
+
+    if (req.method === "PATCH") {
+      const body = await req.json().catch(() => ({}));
+      const token = String(body.token ?? "");
+      const guildId = await resolveToken(token);
+      if (!guildId) return json({ error: "invalid or expired token" }, 401);
+      const action = String(body.action ?? "");
+      const clanTag = String(body.clan_tag ?? "").toUpperCase();
+      if (!clanTag) return json({ error: "clan_tag required" }, 400);
+
+      // Verify the clan is actually tracked in this guild
+      const { data: existing } = await sb.from("war_track_config")
+        .select("clan_tag,mail_channel_id,mail_ping_role_id")
+        .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+      if (!existing) return json({ error: `clan ${clanTag} not war-tracked in this server` }, 404);
+
+      if (action === "save_announcement") {
+        const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+        if ("win_announcement" in body) patch.win_announcement = nullStr(body.win_announcement);
+        if ("lose_announcement" in body) patch.lose_announcement = nullStr(body.lose_announcement);
+        const { error } = await sb.from("war_track_config").update(patch)
+          .eq("guild_id", guildId).eq("clan_tag", clanTag);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      if (action === "test_announcement") {
+        const outcome = body.outcome === "lose" ? "lose" : "win";
+        const tpl = String(body.template ?? "") || (outcome === "win" ? WIN_DEFAULT : LOSE_DEFAULT);
+        if (!existing.mail_channel_id) return json({ error: "no mail channel configured for this clan" }, 400);
+        const { data: clan } = await sb.from("clans").select("name").eq("tag", clanTag).maybeSingle();
+        const ping = existing.mail_ping_role_id ? `<@&${existing.mail_ping_role_id}>` : "";
+        const content = `🧪 **Test announcement** (${outcome.toUpperCase()})\n` +
+          renderAnnouncement(tpl, clan?.name ?? "", clanTag, ping);
+        const r = await fetch(`https://discord.com/api/v10/channels/${existing.mail_channel_id}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bot ${BOT}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ content, allowed_mentions: { parse: ["roles"] } }),
+        });
+        if (!r.ok) {
+          const txt = await r.text();
+          return json({ error: `Discord ${r.status}: ${txt.slice(0, 200)}` }, 502);
+        }
+        return json({ ok: true, channel_id: existing.mail_channel_id });
+      }
+
+      return json({ error: "unknown action" }, 400);
     }
 
     if (req.method === "DELETE") {

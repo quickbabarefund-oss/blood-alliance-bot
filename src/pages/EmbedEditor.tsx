@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Save, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Save, RotateCcw, Send, Megaphone } from "lucide-react";
 
 const API = `https://oumdgsdoehqbsyudkwzm.supabase.co/functions/v1/embed-templates-api`;
 
@@ -22,6 +22,11 @@ interface Template {
   show_timestamp: boolean;
 }
 interface SlotMeta { slot: string; label: string }
+interface WarClan {
+  clan_tag: string; clan_name: string;
+  win_announcement: string | null; lose_announcement: string | null;
+  mail_channel_id: string | null; mail_ping_role_id: string | null;
+}
 
 const empty = (slot: string): Template => ({
   slot, enabled: true,
@@ -58,6 +63,10 @@ export default function EmbedEditor() {
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
   const [saving, setSaving] = useState(false);
+  const [warClans, setWarClans] = useState<WarClan[]>([]);
+  const [annDefaults, setAnnDefaults] = useState<{ win: string; lose: string }>({ win: "", lose: "" });
+  // "announcements" is a synthetic tab — handled separately from embed slots
+  const isAnnouncementsTab = active === "__announcements__";
 
   useEffect(() => {
     if (!token) { setError("Missing token. Run /embed_editor in Discord to get a link."); setLoading(false); return; }
@@ -75,6 +84,8 @@ export default function EmbedEditor() {
           map[s.slot] = j.templates[s.slot] ?? empty(s.slot);
         }
         setTplMap(map);
+        setWarClans(j.war_clans ?? []);
+        setAnnDefaults(j.announcement_defaults ?? { win: "", lose: "" });
         if (j.slots?.[0]) setActive(j.slots[0].slot);
       } catch (e: any) {
         setError(e?.message ?? "Failed to load");
@@ -122,7 +133,7 @@ export default function EmbedEditor() {
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
   if (error) return <div className="mx-auto max-w-xl p-8 text-center text-destructive">{error}</div>;
-  if (!tpl) return <div className="p-8">No template loaded.</div>;
+  if (!isAnnouncementsTab && !tpl) return <div className="p-8">No template loaded.</div>;
 
   return (
     <div className="space-y-6">
@@ -146,7 +157,26 @@ export default function EmbedEditor() {
             {s.label}
           </button>
         ))}
+        <button
+          onClick={() => setActive("__announcements__")}
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
+            isAnnouncementsTab ? "bg-secondary text-gold" : "bg-card text-muted-foreground hover:bg-secondary"
+          }`}
+        >
+          <Megaphone className="h-3.5 w-3.5" /> War Announcements
+        </button>
       </div>
+
+      {isAnnouncementsTab ? (
+        <WarAnnouncementsSection
+          token={token}
+          warClans={warClans}
+          defaults={annDefaults}
+          onSaved={(updated) => setWarClans((cs) => cs.map((c) => c.clan_tag === updated.clan_tag ? updated : c))}
+        />
+      ) : null}
+
+      {!isAnnouncementsTab && (
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Form */}
@@ -249,6 +279,7 @@ export default function EmbedEditor() {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -352,6 +383,187 @@ function DiscordEmbedPreview({ tpl }: { tpl: Template }) {
         </div>
         {tpl.thumbnail_url && <img src={tpl.thumbnail_url} alt="" className="h-20 w-20 shrink-0 rounded object-cover" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />}
       </div>
+    </div>
+  );
+}
+
+const ANNOUNCEMENT_PLACEHOLDERS: Array<[string, string]> = [
+  ["{opponent}", "Opponent clan name"],
+  ["{opp_tag}", "Opponent clan tag"],
+  ["{our}", "Your clan name"],
+  ["{our_tag}", "Your clan tag"],
+  ["{ping}", "Mail-room role mention"],
+];
+
+function WarAnnouncementsSection({
+  token, warClans, defaults, onSaved,
+}: {
+  token: string;
+  warClans: WarClan[];
+  defaults: { win: string; lose: string };
+  onSaved: (c: WarClan) => void;
+}) {
+  const [selectedTag, setSelectedTag] = useState<string>(warClans[0]?.clan_tag ?? "");
+  const selected = warClans.find((c) => c.clan_tag === selectedTag);
+  const [winText, setWinText] = useState<string>("");
+  const [loseText, setLoseText] = useState<string>("");
+  const [busy, setBusy] = useState<"" | "save" | "test-win" | "test-lose">("");
+
+  useEffect(() => {
+    if (!selected) { setWinText(""); setLoseText(""); return; }
+    setWinText(selected.win_announcement ?? defaults.win);
+    setLoseText(selected.lose_announcement ?? defaults.lose);
+  }, [selectedTag, selected, defaults.win, defaults.lose]);
+
+  if (!warClans.length) {
+    return (
+      <Card className="p-6 text-sm text-muted-foreground">
+        No clans are war-tracked in this server yet. Use <code>/war_track_setup</code> first.
+      </Card>
+    );
+  }
+
+  const copy = (v: string) => {
+    navigator.clipboard.writeText(v);
+    toast({ title: "Copied", description: `${v} → clipboard.` });
+  };
+
+  const save = async () => {
+    if (!selected) return;
+    setBusy("save");
+    try {
+      const r = await fetch(API, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token, action: "save_announcement", clan_tag: selected.clan_tag,
+          win_announcement: winText, lose_announcement: loseText,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      onSaved({ ...selected, win_announcement: winText || null, lose_announcement: loseText || null });
+      toast({ title: "Saved", description: `Announcements updated for ${selected.clan_name || selected.clan_tag}.` });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message ?? "error", variant: "destructive" });
+    } finally { setBusy(""); }
+  };
+
+  const testSend = async (outcome: "win" | "lose") => {
+    if (!selected) return;
+    if (!selected.mail_channel_id) {
+      toast({ title: "No mail channel", description: "Configure a mail channel via /war_track_setup first.", variant: "destructive" });
+      return;
+    }
+    setBusy(outcome === "win" ? "test-win" : "test-lose");
+    try {
+      const r = await fetch(API, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token, action: "test_announcement", clan_tag: selected.clan_tag,
+          outcome, template: outcome === "win" ? winText : loseText,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      toast({ title: "Test sent", description: `Posted to <#${j.channel_id}> in Discord.` });
+    } catch (e: any) {
+      toast({ title: "Test failed", description: e?.message ?? "error", variant: "destructive" });
+    } finally { setBusy(""); }
+  };
+
+  const renderPreview = (tpl: string) => tpl
+    .split("{opponent}").join("Sample Enemy Clan")
+    .split("{opp_tag}").join("#OPPTAG")
+    .split("{our}").join(selected?.clan_name || selected?.clan_tag || "")
+    .split("{our_tag}").join(selected?.clan_tag ?? "")
+    .split("{ping}").join(selected?.mail_ping_role_id ? `@MailRole` : "");
+
+  return (
+    <div className="space-y-6">
+      <Card className="space-y-4 p-5">
+        <div>
+          <Label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+            Clan
+          </Label>
+          <select
+            value={selectedTag}
+            onChange={(e) => setSelectedTag(e.target.value)}
+            className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+          >
+            {warClans.map((c) => (
+              <option key={c.clan_tag} value={c.clan_tag}>
+                {c.clan_name ? `${c.clan_name} (${c.clan_tag})` : c.clan_tag}
+              </option>
+            ))}
+          </select>
+          {selected && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Mail channel: {selected.mail_channel_id ? <code>&lt;#{selected.mail_channel_id}&gt;</code> : <span className="text-destructive">not set</span>}
+              {" • "}
+              Ping role: {selected.mail_ping_role_id ? <code>&lt;@&{selected.mail_ping_role_id}&gt;</code> : <span className="text-muted-foreground">none</span>}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-md border border-border bg-muted/30 p-3">
+          <div className="mb-1.5 text-xs uppercase tracking-wide text-muted-foreground">Available placeholders (click to copy)</div>
+          <div className="flex flex-wrap gap-1.5">
+            {ANNOUNCEMENT_PLACEHOLDERS.map(([k, desc]) => (
+              <button key={k} type="button" onClick={() => copy(k)}
+                className="rounded bg-secondary px-2 py-0.5 text-xs font-mono text-gold hover:bg-secondary/70" title={desc}>
+                {k}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 space-y-1 border-t border-border pt-2">
+            {ANNOUNCEMENT_PLACEHOLDERS.map(([k, desc]) => (
+              <div key={k} className="flex items-start gap-2 text-xs">
+                <code className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-gold">{k}</code>
+                <span className="text-muted-foreground">{desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              🏆 WIN announcement
+            </Label>
+            <Textarea rows={5} value={winText} onChange={(e) => setWinText(e.target.value)} placeholder={defaults.win} />
+            <div className="rounded-md bg-[#313338] p-3 text-sm text-[#dcddde] whitespace-pre-wrap">
+              {renderPreview(winText)}
+            </div>
+            <Button size="sm" variant="outline" disabled={busy !== ""} onClick={() => testSend("win")}>
+              <Send className="mr-1 h-4 w-4" /> {busy === "test-win" ? "Sending…" : "Send test to mail channel"}
+            </Button>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              🏳️ LOSE announcement
+            </Label>
+            <Textarea rows={5} value={loseText} onChange={(e) => setLoseText(e.target.value)} placeholder={defaults.lose} />
+            <div className="rounded-md bg-[#313338] p-3 text-sm text-[#dcddde] whitespace-pre-wrap">
+              {renderPreview(loseText)}
+            </div>
+            <Button size="sm" variant="outline" disabled={busy !== ""} onClick={() => testSend("lose")}>
+              <Send className="mr-1 h-4 w-4" /> {busy === "test-lose" ? "Sending…" : "Send test to mail channel"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <Button onClick={save} disabled={busy !== ""}>
+            <Save className="mr-1 h-4 w-4" /> {busy === "save" ? "Saving…" : "Save announcements"}
+          </Button>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          These messages are posted to the mail-room channel when a rep marks a war as Win or Lose.
+          Use <strong>Send test</strong> to verify your channel + role permissions are working — it posts a one-off
+          message tagged 🧪 to the same channel without affecting any real war.
+        </p>
+      </Card>
     </div>
   );
 }
