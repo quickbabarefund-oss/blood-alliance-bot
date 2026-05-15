@@ -163,6 +163,22 @@ Deno.serve(async (req) => {
       if (action === "force_sync") {
         const warnings: string[] = [];
         try {
+          const { data: tpl } = await sb.from("embed_templates")
+            .select("title,description,color,footer_text,show_timestamp,thumbnail_url,image_url")
+            .eq("guild_id", guildId).eq("slot", "family_dashboard").maybeSingle();
+          if (tpl) {
+            const patch: Record<string, any> = {
+              updated_at: new Date().toISOString(),
+              description: tpl.description ?? null,
+              footer_text: tpl.footer_text ?? null,
+              show_timestamp: !!tpl.show_timestamp,
+              thumbnail_url: tpl.thumbnail_url ?? null,
+              image_url: tpl.image_url ?? null,
+            };
+            if (tpl.title) patch.title = tpl.title;
+            if (typeof tpl.color === "number") patch.color = tpl.color;
+            await sb.from("family_dashboards").update(patch).eq("guild_id", guildId);
+          }
           const { syncDashboardMessage } = await import("../_shared/family.ts");
           const sync = await syncDashboardMessage(guildId);
           if (!sync.ok && sync.error) warnings.push(`Family dashboard: ${sync.error}`);
