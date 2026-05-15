@@ -107,6 +107,12 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       if (slot === "family_dashboard") {
+        if (typeof body.spacing_lines === "number") {
+          const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
+          await sb.from("family_dashboards")
+            .update({ spacing_lines: sp, updated_at: new Date().toISOString() })
+            .eq("guild_id", guildId);
+        }
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
           syncDashboardMessage(guildId).catch((e) => console.error("sync after edit", e));
