@@ -258,12 +258,12 @@ export async function syncDashboardMessage(guildId: string): Promise<{ ok: boole
     headers: { Authorization: `Bot ${BOT}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!r2.ok) return { ok: false, error: `Discord ${r2.status}: ${(await r2.text()).slice(0, 200)}` };
+  if (!r2.ok) return { ok: false, error: `Discord POST ${r2.status}: ${(await r2.text()).slice(0, 200)}`, ...proof };
   const j = await r2.json();
   await sb.from("family_dashboards").update({
     message_id: j.id, updated_at: new Date().toISOString(),
   }).eq("guild_id", guildId);
-  return { ok: true };
+  return { ok: true, ...proof, message_id: j.id };
 }
 
 export { normalizeTag };
