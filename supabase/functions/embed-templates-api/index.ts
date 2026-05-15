@@ -159,6 +159,26 @@ Deno.serve(async (req) => {
       const guildId = await resolveToken(token);
       if (!guildId) return json({ error: "invalid or expired token" }, 401);
       const action = String(body.action ?? "");
+
+      if (action === "force_sync") {
+        const warnings: string[] = [];
+        try {
+          const { syncDashboardMessage } = await import("../_shared/family.ts");
+          const sync = await syncDashboardMessage(guildId);
+          if (!sync.ok && sync.error) warnings.push(`Family dashboard: ${sync.error}`);
+        } catch (e) {
+          warnings.push(`Family dashboard: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        try {
+          const { refreshGuildLeaderboardMessages } = await import("../_shared/leaderboard.ts");
+          const sync = await refreshGuildLeaderboardMessages(guildId);
+          if (!sync.ok && sync.error) warnings.push(`Donation leaderboards: ${sync.error}`);
+        } catch (e) {
+          warnings.push(`Donation leaderboards: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        return json({ ok: true, sync_warning: warnings.length ? warnings.join("; ") : undefined });
+      }
+
       const clanTag = String(body.clan_tag ?? "").toUpperCase();
       if (!clanTag) return json({ error: "clan_tag required" }, 400);
 
