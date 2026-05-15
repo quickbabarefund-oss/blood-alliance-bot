@@ -133,7 +133,7 @@ export default function EmbedEditor() {
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
   if (error) return <div className="mx-auto max-w-xl p-8 text-center text-destructive">{error}</div>;
-  if (!tpl) return <div className="p-8">No template loaded.</div>;
+  if (!isAnnouncementsTab && !tpl) return <div className="p-8">No template loaded.</div>;
 
   return (
     <div className="space-y-6">
@@ -157,7 +157,26 @@ export default function EmbedEditor() {
             {s.label}
           </button>
         ))}
+        <button
+          onClick={() => setActive("__announcements__")}
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
+            isAnnouncementsTab ? "bg-secondary text-gold" : "bg-card text-muted-foreground hover:bg-secondary"
+          }`}
+        >
+          <Megaphone className="h-3.5 w-3.5" /> War Announcements
+        </button>
       </div>
+
+      {isAnnouncementsTab ? (
+        <WarAnnouncementsSection
+          token={token}
+          warClans={warClans}
+          defaults={annDefaults}
+          onSaved={(updated) => setWarClans((cs) => cs.map((c) => c.clan_tag === updated.clan_tag ? updated : c))}
+        />
+      ) : null}
+
+      {!isAnnouncementsTab && (
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Form */}
