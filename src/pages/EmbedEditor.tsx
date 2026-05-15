@@ -22,6 +22,11 @@ interface Template {
   show_timestamp: boolean;
 }
 interface SlotMeta { slot: string; label: string }
+interface WarClan {
+  clan_tag: string; clan_name: string;
+  win_announcement: string | null; lose_announcement: string | null;
+  mail_channel_id: string | null; mail_ping_role_id: string | null;
+}
 
 const empty = (slot: string): Template => ({
   slot, enabled: true,
