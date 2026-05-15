@@ -84,6 +84,8 @@ export default function EmbedEditor() {
           map[s.slot] = j.templates[s.slot] ?? empty(s.slot);
         }
         setTplMap(map);
+        setWarClans(j.war_clans ?? []);
+        setAnnDefaults(j.announcement_defaults ?? { win: "", lose: "" });
         if (j.slots?.[0]) setActive(j.slots[0].slot);
       } catch (e: any) {
         setError(e?.message ?? "Failed to load");
