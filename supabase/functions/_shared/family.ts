@@ -21,6 +21,7 @@ export interface FamilyDashboardCfg {
   image_url: string | null;
   category_emoji: string;
   clan_line_format: string;
+  spacing_lines?: number;
 }
 
 export async function loadFamily(guildId: string) {
