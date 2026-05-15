@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Trash2, Save, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Save, RotateCcw, Send, Megaphone } from "lucide-react";
 
 const API = `https://oumdgsdoehqbsyudkwzm.supabase.co/functions/v1/embed-templates-api`;
 
