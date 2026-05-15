@@ -86,7 +86,12 @@ Deno.serve(async (req) => {
       for (const r of data ?? []) map[(r as any).slot] = r;
       const { data: g } = await sb.from("guilds").select("name").eq("guild_id", guildId).maybeSingle();
       const { data: famDash } = await sb.from("family_dashboards")
-        .select("spacing_lines").eq("guild_id", guildId).maybeSingle();
+        .select("title,description,color,footer_text,thumbnail_url,image_url,show_timestamp,spacing_lines")
+        .eq("guild_id", guildId).maybeSingle();
+      if (famDash) {
+        const current = map.family_dashboard ?? {};
+        map.family_dashboard = templateRowFromFamilyDashboard(guildId, famDash, current);
+      }
       const war_clans = await loadWarClans(guildId);
       return json({
         guild_id: guildId, guild_name: g?.name ?? null,
