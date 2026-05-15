@@ -344,6 +344,22 @@ export const COMMANDS: any[] = [
     ],
   },
   {
+    name: "cwl_roster",
+    description: "Show full CWL roster (all clans + their members)",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "cwl_board",
+    description: "Send a CWL leaderboard image with clan rankings & stats",
+    options: [
+      { type: STRING, name: "tag", description: "Any clan in the CWL group (defaults to your linked clan)" },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
     name: "capital_raids",
     description: "Show the most recent Clan Capital raid weekend summary",
     options: [
