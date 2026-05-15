@@ -1,7 +1,7 @@
 // Family Clan Dashboard helpers
 import { adminClient } from "./leaderboard.ts";
 import { fetchClan, normalizeTag, type CoCClan } from "./coc.ts";
-import { applyTemplate } from "./embed_templates.ts";
+import { applyTemplate, getTemplate } from "./embed_templates.ts";
 
 const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const DEFAULT_COLOR = 0x5865F2;
@@ -70,10 +70,12 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
   const emoji = c.category_emoji || "🏰";
   const lineTpl = c.clan_line_format || "`{i}.` **{name}** `{tag}`";
   const spacing = Math.max(0, Math.min(2, c.spacing_lines ?? 1));
+  const template = await getTemplate(guildId, "family_dashboard");
+  const hasEffectiveDescription = Boolean(c.description || (template?.enabled && template.description));
   const SEP = { name: "\u200b", value: "\u200b", inline: false };
   const pushSep = () => { for (let k = 0; k < spacing; k++) fields.push({ ...SEP }); };
 
-  if (categories.length && c.description) pushSep();
+  if (categories.length && hasEffectiveDescription) pushSep();
 
   categories.forEach((cat, idx) => {
     const cs = clans.filter((x) => x.category_id === cat.id);
