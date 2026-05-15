@@ -43,6 +43,7 @@ async function loadWarClans(guildId: string) {
 
 const WIN_DEFAULT = "🏆 {ping} — We're going for the **WIN** vs **{opponent}** ({opp_tag})! Mirror first attack 3⭐, ≥2⭐ in first 16h, 3⭐ in last 8h.";
 const LOSE_DEFAULT = "🏳️ {ping} — We're **LOSING** vs **{opponent}** ({opp_tag}). Mirror first attack 2⭐, 1⭐ first 16h, 2⭐ last 8h. No extras.";
+const FAMILY_DASHBOARD_DEFAULT_TITLE = "🏛️ Family Clan Dashboard";
 
 function renderAnnouncement(tpl: string, clanName: string, clanTag: string, ping: string) {
   return tpl
@@ -51,6 +52,40 @@ function renderAnnouncement(tpl: string, clanName: string, clanTag: string, ping
     .replaceAll("{our}", clanName || clanTag)
     .replaceAll("{our_tag}", clanTag)
     .replaceAll("{ping}", ping);
+}
+
+function familyDashboardPatchFromTemplate(row: Record<string, any>, spacingLines?: unknown) {
+  const patch: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+    title: row.title || FAMILY_DASHBOARD_DEFAULT_TITLE,
+    description: row.description ?? null,
+    footer_text: row.footer_text ?? null,
+    show_timestamp: !!row.show_timestamp,
+    thumbnail_url: row.thumbnail_url ?? null,
+    image_url: row.image_url ?? null,
+  };
+  patch.color = typeof row.color === "number" ? row.color : 0x5865F2;
+  if (typeof spacingLines === "number") {
+    patch.spacing_lines = Math.max(0, Math.min(2, Math.floor(spacingLines)));
+  }
+  return patch;
+}
+
+function templateRowFromFamilyDashboard(guildId: string, dashboard: Record<string, any>, current: Record<string, any> = {}) {
+  return {
+    guild_id: guildId,
+    slot: "family_dashboard",
+    enabled: current.enabled !== false,
+    title: dashboard.title ?? current.title ?? "",
+    description: dashboard.description ?? "",
+    color: typeof dashboard.color === "number" ? dashboard.color : current.color ?? 0x5865F2,
+    footer_text: dashboard.footer_text ?? "",
+    thumbnail_url: dashboard.thumbnail_url ?? "",
+    image_url: dashboard.image_url ?? "",
+    content: current.content ?? "",
+    fields: Array.isArray(current.fields) ? current.fields : [],
+    show_timestamp: !!dashboard.show_timestamp,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -68,7 +103,12 @@ Deno.serve(async (req) => {
       for (const r of data ?? []) map[(r as any).slot] = r;
       const { data: g } = await sb.from("guilds").select("name").eq("guild_id", guildId).maybeSingle();
       const { data: famDash } = await sb.from("family_dashboards")
-        .select("spacing_lines").eq("guild_id", guildId).maybeSingle();
+        .select("title,description,color,footer_text,thumbnail_url,image_url,show_timestamp,spacing_lines")
+        .eq("guild_id", guildId).maybeSingle();
+      if (famDash) {
+        const current = map.family_dashboard ?? {};
+        map.family_dashboard = templateRowFromFamilyDashboard(guildId, famDash, current);
+      }
       const war_clans = await loadWarClans(guildId);
       return json({
         guild_id: guildId, guild_name: g?.name ?? null,
@@ -107,19 +147,9 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       if (slot === "family_dashboard") {
-        const dashboardPatch: Record<string, any> = { updated_at: new Date().toISOString() };
-        if (row.title) dashboardPatch.title = row.title;
-        dashboardPatch.description = row.description;
-        if (typeof row.color === "number") dashboardPatch.color = row.color;
-        dashboardPatch.footer_text = row.footer_text;
-        dashboardPatch.show_timestamp = row.show_timestamp;
-        dashboardPatch.thumbnail_url = row.thumbnail_url;
-        dashboardPatch.image_url = row.image_url;
-        if (typeof body.spacing_lines === "number") {
-          const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
-          dashboardPatch.spacing_lines = sp;
-        }
-        await sb.from("family_dashboards").update(dashboardPatch).eq("guild_id", guildId);
+        await sb.from("family_dashboards")
+          .update(familyDashboardPatchFromTemplate(row, body.spacing_lines))
+          .eq("guild_id", guildId);
         let syncWarn: string | undefined;
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
@@ -184,10 +214,14 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           };
           await sb.from("embed_templates").upsert(row, { onConflict: "guild_id,slot" });
-        }
-        if (typeof body.spacing_lines === "number") {
+          await sb.from("family_dashboards")
+            .update(familyDashboardPatchFromTemplate(row, body.spacing_lines))
+            .eq("guild_id", guildId);
+        } else if (typeof body.spacing_lines === "number") {
           const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
-          await sb.from("family_dashboards").update({ spacing_lines: sp, updated_at: new Date().toISOString() }).eq("guild_id", guildId);
+          await sb.from("family_dashboards")
+            .update({ spacing_lines: sp, updated_at: new Date().toISOString() })
+            .eq("guild_id", guildId);
         }
 
         try {
@@ -195,17 +229,9 @@ Deno.serve(async (req) => {
             .select("title,description,color,footer_text,show_timestamp,thumbnail_url,image_url")
             .eq("guild_id", guildId).eq("slot", "family_dashboard").maybeSingle();
           if (tpl) {
-            const patch: Record<string, any> = {
-              updated_at: new Date().toISOString(),
-              description: tpl.description ?? null,
-              footer_text: tpl.footer_text ?? null,
-              show_timestamp: !!tpl.show_timestamp,
-              thumbnail_url: tpl.thumbnail_url ?? null,
-              image_url: tpl.image_url ?? null,
-            };
-            if (tpl.title) patch.title = tpl.title;
-            if (typeof tpl.color === "number") patch.color = tpl.color;
-            await sb.from("family_dashboards").update(patch).eq("guild_id", guildId);
+            await sb.from("family_dashboards")
+              .update(familyDashboardPatchFromTemplate(tpl, body.spacing_lines))
+              .eq("guild_id", guildId);
           }
           const { syncDashboardMessage } = await import("../_shared/family.ts");
           const sync = await syncDashboardMessage(guildId);
