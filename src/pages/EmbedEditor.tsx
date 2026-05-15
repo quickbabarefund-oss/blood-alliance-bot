@@ -63,6 +63,10 @@ export default function EmbedEditor() {
   const [active, setActive] = useState<string>("family_dashboard");
   const [tplMap, setTplMap] = useState<Record<string, Template>>({});
   const [saving, setSaving] = useState(false);
+  const [warClans, setWarClans] = useState<WarClan[]>([]);
+  const [annDefaults, setAnnDefaults] = useState<{ win: string; lose: string }>({ win: "", lose: "" });
+  // "announcements" is a synthetic tab — handled separately from embed slots
+  const isAnnouncementsTab = active === "__announcements__";
 
   useEffect(() => {
     if (!token) { setError("Missing token. Run /embed_editor in Discord to get a link."); setLoading(false); return; }
