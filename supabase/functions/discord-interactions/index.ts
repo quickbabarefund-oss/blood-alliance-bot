@@ -704,6 +704,23 @@ function handleHelp(_interaction: any): Response {
         "`/lowest [clan] [count]` — Lowest donators this month",
         "`/player <tag>` — Player history & monthly totals",
         "`/refresh [clan]` — Force immediate poll & leaderboard refresh *(admin)*",
+        "`/donation_reset [clan_tag]` — Reset this month's donation totals *(admin)*",
+      ],
+    },
+    {
+      title: "🔍 Clash of Clans Lookups",
+      lines: [
+        "`/player_info [tag] [user]` — TH, heroes, donations, war stars",
+        "`/clan_info [tag] [user]` — Level, league, members, war record",
+        "`/clan_members [tag] [user]` — Members sorted by donations",
+        "`/compo [tag] [user]` — Town Hall composition breakdown",
+        "`/current_war [tag] [user]` — Live current-war status",
+        "`/war_log [tag] [user]` — Last 10 regular wars",
+        "`/cwl [tag] [user]` — Current CWL status / round",
+        "`/cwl_roster [tag] [user]` — Full CWL roster",
+        "`/cwl_board [tag] [user]` — CWL leaderboard image",
+        "`/capital_raids [tag] [user]` — Latest Clan Capital raid weekend",
+        "_Tip: type a clan tag to autocomplete from this server's Family clans._",
       ],
     },
     {
@@ -713,6 +730,16 @@ function handleHelp(_interaction: any): Response {
         "`/clan remove <tag>` — Stop tracking a clan *(admin)*",
         "`/clan list` — List tracked clans in this server",
         "`/global setchannel <channel>` — Bind global alliance leaderboard *(admin)*",
+      ],
+    },
+    {
+      title: "🏛️ Family Dashboard",
+      lines: [
+        "`/family_category add|remove|rename|list` — Manage categories *(admin)*",
+        "`/family_clan add|remove|move|list` — Manage clans in categories *(admin)*",
+        "`/family_clan_dashboard [channel]` — Post / re-bind the dashboard message *(admin)*",
+        "`/family_customize ...` — Title, color, footer, line format, images *(admin)*",
+        "`/embed_editor` — Open the web-based embed builder *(admin)*",
       ],
     },
     {
@@ -726,6 +753,7 @@ function handleHelp(_interaction: any): Response {
         "`/th_emoji set|list` — Map custom Town Hall emojis *(admin)*",
         "`/war_track_list` — List war-tracked clans in this server *(admin)*",
         "`/war_track_remove <clan>` — Stop war tracking for a clan *(admin)*",
+        "`/war_resend_result <clan>` — Re-evaluate & repost latest war result *(admin)*",
       ],
     },
     {
@@ -747,11 +775,12 @@ function handleHelp(_interaction: any): Response {
       ],
     },
     {
-      title: "🔐 Permissions",
+      title: "🔐 Permissions & Maintenance",
       lines: [
         "`/perm grant <command> <role>` — Allow a role to use a command *(admin)*",
         "`/perm revoke <command> <role>` — Revoke a role *(admin)*",
         "`/perm list` — Show per-command role overrides",
+        "`/force_reset` — Wipe guild slash commands & re-sync globals *(admin)*",
       ],
     },
   ];
