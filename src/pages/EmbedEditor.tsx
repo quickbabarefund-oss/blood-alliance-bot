@@ -472,11 +472,11 @@ function WarAnnouncementsSection({
   };
 
   const renderPreview = (tpl: string) => tpl
-    .replaceAll("{opponent}", "Sample Enemy Clan")
-    .replaceAll("{opp_tag}", "#OPPTAG")
-    .replaceAll("{our}", selected?.clan_name || selected?.clan_tag || "")
-    .replaceAll("{our_tag}", selected?.clan_tag ?? "")
-    .replaceAll("{ping}", selected?.mail_ping_role_id ? `@MailRole` : "");
+    .split("{opponent}").join("Sample Enemy Clan")
+    .split("{opp_tag}").join("#OPPTAG")
+    .split("{our}").join(selected?.clan_name || selected?.clan_tag || "")
+    .split("{our_tag}").join(selected?.clan_tag ?? "")
+    .split("{ping}").join(selected?.mail_ping_role_id ? `@MailRole` : "");
 
   return (
     <div className="space-y-6">
