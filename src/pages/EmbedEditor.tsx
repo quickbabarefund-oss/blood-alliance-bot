@@ -65,6 +65,7 @@ export default function EmbedEditor() {
   const [saving, setSaving] = useState(false);
   const [warClans, setWarClans] = useState<WarClan[]>([]);
   const [annDefaults, setAnnDefaults] = useState<{ win: string; lose: string }>({ win: "", lose: "" });
+  const [familySpacing, setFamilySpacing] = useState<number>(1);
   // "announcements" is a synthetic tab — handled separately from embed slots
   const isAnnouncementsTab = active === "__announcements__";
 
@@ -86,6 +87,7 @@ export default function EmbedEditor() {
         setTplMap(map);
         setWarClans(j.war_clans ?? []);
         setAnnDefaults(j.announcement_defaults ?? { win: "", lose: "" });
+        setFamilySpacing(typeof j.family_dashboard_spacing === "number" ? j.family_dashboard_spacing : 1);
         if (j.slots?.[0]) setActive(j.slots[0].slot);
       } catch (e: any) {
         setError(e?.message ?? "Failed to load");
@@ -102,9 +104,11 @@ export default function EmbedEditor() {
   const save = async () => {
     setSaving(true);
     try {
+      const payload: any = { token, ...tpl };
+      if (active === "family_dashboard") payload.spacing_lines = familySpacing;
       const r = await fetch(API, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, ...tpl }),
+        body: JSON.stringify(payload),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
@@ -226,6 +230,23 @@ export default function EmbedEditor() {
           <Field label="Plain content (above embed, optional)">
             <Textarea rows={2} value={tpl.content ?? ""} onChange={(e) => update({ content: e.target.value })} />
           </Field>
+
+          {active === "family_dashboard" && (
+            <Field label="Spacing between description & categories">
+              <div className="flex items-center gap-2">
+                {[0, 1, 2].map((n) => (
+                  <Button key={n} type="button" size="sm"
+                    variant={familySpacing === n ? "default" : "outline"}
+                    onClick={() => setFamilySpacing(n)}>
+                    {n === 0 ? "None" : n === 1 ? "1 line" : "2 lines"}
+                  </Button>
+                ))}
+                <span className="text-xs text-muted-foreground">
+                  Controls blank lines between description→first category and between categories.
+                </span>
+              </div>
+            </Field>
+          )}
 
           <div>
             <div className="mb-2 flex items-center justify-between">

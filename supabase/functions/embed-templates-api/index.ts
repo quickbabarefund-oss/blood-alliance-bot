@@ -67,12 +67,15 @@ Deno.serve(async (req) => {
       const map: Record<string, any> = {};
       for (const r of data ?? []) map[(r as any).slot] = r;
       const { data: g } = await sb.from("guilds").select("name").eq("guild_id", guildId).maybeSingle();
+      const { data: famDash } = await sb.from("family_dashboards")
+        .select("spacing_lines").eq("guild_id", guildId).maybeSingle();
       const war_clans = await loadWarClans(guildId);
       return json({
         guild_id: guildId, guild_name: g?.name ?? null,
         slots: EMBED_SLOTS, placeholders: SLOT_PLACEHOLDERS, placeholder_descriptions: SLOT_PLACEHOLDER_DESCRIPTIONS,
         templates: map,
         war_clans,
+        family_dashboard_spacing: famDash?.spacing_lines ?? 1,
         announcement_defaults: { win: WIN_DEFAULT, lose: LOSE_DEFAULT },
       });
     }
@@ -104,6 +107,12 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
 
       if (slot === "family_dashboard") {
+        if (typeof body.spacing_lines === "number") {
+          const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
+          await sb.from("family_dashboards")
+            .update({ spacing_lines: sp, updated_at: new Date().toISOString() })
+            .eq("guild_id", guildId);
+        }
         try {
           const { syncDashboardMessage } = await import("../_shared/family.ts");
           syncDashboardMessage(guildId).catch((e) => console.error("sync after edit", e));

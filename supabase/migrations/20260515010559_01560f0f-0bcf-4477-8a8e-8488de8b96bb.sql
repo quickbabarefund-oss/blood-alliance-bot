@@ -1,0 +1,1 @@
+ALTER TABLE public.family_dashboards ADD COLUMN IF NOT EXISTS spacing_lines smallint NOT NULL DEFAULT 1 CHECK (spacing_lines BETWEEN 0 AND 2);

@@ -21,6 +21,7 @@ export interface FamilyDashboardCfg {
   image_url: string | null;
   category_emoji: string;
   clan_line_format: string;
+  spacing_lines?: number;
 }
 
 export async function loadFamily(guildId: string) {
@@ -68,7 +69,13 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
 
   const emoji = c.category_emoji || "🏰";
   const lineTpl = c.clan_line_format || "`{i}.` **{name}** `{tag}`";
-  categories.forEach((cat) => {
+  const spacing = Math.max(0, Math.min(2, c.spacing_lines ?? 1));
+  const SEP = { name: "\u200b", value: "\u200b", inline: false };
+  const pushSep = () => { for (let k = 0; k < spacing; k++) fields.push({ ...SEP }); };
+
+  if (categories.length && c.description) pushSep();
+
+  categories.forEach((cat, idx) => {
     const cs = clans.filter((x) => x.category_id === cat.id);
     const value = cs.length
       ? cs.map((cl, i) => formatLine(lineTpl, {
@@ -76,6 +83,7 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
         })).join("\n")
       : "_No clans yet_";
     fields.push({ name: `${emoji} ${cat.name} — ${cs.length}`, value, inline: false });
+    if (idx < categories.length - 1) pushSep();
   });
 
   const components: any[] = [];
