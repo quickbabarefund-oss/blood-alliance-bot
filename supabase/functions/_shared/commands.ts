@@ -307,7 +307,7 @@ export const COMMANDS: any[] = [
     name: "clan_info",
     description: "Show level, league, members, war record and ChocolateClash link for a clan",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -315,7 +315,7 @@ export const COMMANDS: any[] = [
     name: "current_war",
     description: "Show the live current-war status for a clan",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -323,7 +323,7 @@ export const COMMANDS: any[] = [
     name: "war_log",
     description: "Show the last 10 regular wars for a clan",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -331,7 +331,7 @@ export const COMMANDS: any[] = [
     name: "clan_members",
     description: "Show clan members sorted by donations",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -339,7 +339,7 @@ export const COMMANDS: any[] = [
     name: "cwl",
     description: "Show current Clan War League status / round",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -347,7 +347,7 @@ export const COMMANDS: any[] = [
     name: "cwl_roster",
     description: "Show full CWL roster (all clans + their members)",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -355,7 +355,7 @@ export const COMMANDS: any[] = [
     name: "cwl_board",
     description: "Send a CWL leaderboard image with clan rankings & stats",
     options: [
-      { type: STRING, name: "tag", description: "Any clan in the CWL group (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Any clan in the CWL group — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -363,7 +363,7 @@ export const COMMANDS: any[] = [
     name: "capital_raids",
     description: "Show the most recent Clan Capital raid weekend summary",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
@@ -371,7 +371,7 @@ export const COMMANDS: any[] = [
     name: "compo",
     description: "Show clan composition (Town Hall breakdown)",
     options: [
-      { type: STRING, name: "tag", description: "Clan tag (defaults to your linked clan)" },
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family clans", autocomplete: true },
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
