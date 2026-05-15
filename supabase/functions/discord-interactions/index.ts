@@ -1261,21 +1261,17 @@ Deno.serve(async (req) => {
           try {
             const data = await builder(guildId, { tag, targetUser, caller });
             // Post the result as a normal (public) follow-up message.
+            // Leave the ephemeral picker untouched so the caller can pick again.
             await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ ...data, flags: 0 }),
             });
-            // Collapse the ephemeral picker into a small confirmation only the caller sees.
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
-              method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `✅ Used \`${tag}\` for **/${cmdName}**.`, components: [], embeds: [] }),
-            });
           } catch (e) {
             console.error("coc pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/messages/@original`, {
-              method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, components: [], embeds: [] }),
-            });
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/followup`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
+            }).catch(() => {});
           }
         })();
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
