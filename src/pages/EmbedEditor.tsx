@@ -104,9 +104,11 @@ export default function EmbedEditor() {
   const save = async () => {
     setSaving(true);
     try {
+      const payload: any = { token, ...tpl };
+      if (active === "family_dashboard") payload.spacing_lines = familySpacing;
       const r = await fetch(API, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, ...tpl }),
+        body: JSON.stringify(payload),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
