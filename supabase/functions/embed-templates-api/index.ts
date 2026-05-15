@@ -192,10 +192,13 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           };
           await sb.from("embed_templates").upsert(row, { onConflict: "guild_id,slot" });
-        }
-        if (typeof body.spacing_lines === "number") {
-          const sp = Math.max(0, Math.min(2, Math.floor(body.spacing_lines)));
-          await sb.from("family_dashboards").update({ spacing_lines: sp, updated_at: new Date().toISOString() }).eq("guild_id", guildId);
+          await sb.from("family_dashboards")
+            .update(familyDashboardPatchFromTemplate(row, body.spacing_lines))
+            .eq("guild_id", guildId);
+        } else if (typeof body.spacing_lines === "number") {
+          await sb.from("family_dashboards")
+            .update(familyDashboardPatchFromTemplate({}, body.spacing_lines))
+            .eq("guild_id", guildId);
         }
 
         try {
@@ -203,17 +206,9 @@ Deno.serve(async (req) => {
             .select("title,description,color,footer_text,show_timestamp,thumbnail_url,image_url")
             .eq("guild_id", guildId).eq("slot", "family_dashboard").maybeSingle();
           if (tpl) {
-            const patch: Record<string, any> = {
-              updated_at: new Date().toISOString(),
-              description: tpl.description ?? null,
-              footer_text: tpl.footer_text ?? null,
-              show_timestamp: !!tpl.show_timestamp,
-              thumbnail_url: tpl.thumbnail_url ?? null,
-              image_url: tpl.image_url ?? null,
-            };
-            if (tpl.title) patch.title = tpl.title;
-            if (typeof tpl.color === "number") patch.color = tpl.color;
-            await sb.from("family_dashboards").update(patch).eq("guild_id", guildId);
+            await sb.from("family_dashboards")
+              .update(familyDashboardPatchFromTemplate(tpl, body.spacing_lines))
+              .eq("guild_id", guildId);
           }
           const { syncDashboardMessage } = await import("../_shared/family.ts");
           const sync = await syncDashboardMessage(guildId);
