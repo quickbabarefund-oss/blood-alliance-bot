@@ -1208,6 +1208,7 @@ Deno.serve(async (req) => {
   if (interaction.type === MESSAGE_COMPONENT) {
     try {
       const cid: string = interaction.data?.custom_id ?? "";
+      const VERY_LARGE = 1_000_000;
       if (cid.startsWith("lb:") && !cid.endsWith(":noop")) {
         const parts = cid.split(":");
         const kind = parts[1]; // "clan" | "global"
