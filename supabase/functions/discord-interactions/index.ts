@@ -1408,6 +1408,18 @@ Deno.serve(async (req) => {
         const payload = isClan ? await buildClanEmbed(guildId, clanTag, page) : await buildGlobalEmbed(guildId, page);
         return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
       }
+      if (cid.startsWith("help:") && !cid.endsWith(":noop")) {
+        const parts = cid.split(":");
+        const action = parts[1];
+        const arg = parts[2];
+        let page = 0;
+        if (action === "first") page = 0;
+        else if (action === "last") page = HELP_SECTIONS.length - 1;
+        else if (action === "prev") page = Math.max(0, (parseInt(arg ?? "0", 10) || 0) - 1);
+        else if (action === "next") page = (parseInt(arg ?? "0", 10) || 0) + 1;
+        const payload = buildHelpPayload(page);
+        return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
+      }
       if (cid.startsWith("war:decide:")) {
         return await handleWarDecide(interaction);
       }
