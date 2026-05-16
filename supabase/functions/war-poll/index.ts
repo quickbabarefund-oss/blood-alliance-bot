@@ -164,7 +164,14 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
 
       // Use decision (set by reps) or fall back to actual result
       const decision = (war.decision ?? result) as "win" | "lose";
-      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers: cw.opponent.members ?? [] });
+      // Build attackTimes map from war_attacks.recorded_at (first-seen timestamps)
+      const { data: atkRows } = await sb.from("war_attacks")
+        .select("attacker_tag,attack_order,recorded_at").eq("war_id", war.id);
+      const attackTimes: Record<string, string> = {};
+      for (const r of (atkRows ?? []) as any[]) {
+        attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
+      }
+      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers: cw.opponent.members ?? [], attackTimes });
 
       // Persist breaks
       await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
