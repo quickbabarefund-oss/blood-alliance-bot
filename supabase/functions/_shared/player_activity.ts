@@ -103,50 +103,125 @@ async function aggregateWars(playerTag: string, sinceIso: string) {
   };
 }
 
+const IDLE_GAP_MS = 10 * 60_000; // >10 min gap = offline
+
+/**
+ * Collect activity timestamps from the union of:
+ *  - player_activity_events (join/leave/donation/receive/attack/defense)
+ *  - donation_snapshots where any tracked counter increased vs previous snapshot
+ *  - war_attacks (recorded_at)
+ * Returns ascending list of ms timestamps in [sinceIso, untilIso).
+ */
+async function collectActivityTimestamps(
+  playerTag: string,
+  sinceIso: string,
+  untilIso?: string,
+): Promise<number[]> {
+  const sb = adminClient();
+  const untilMs = untilIso ? new Date(untilIso).getTime() : Infinity;
+  const sinceMs = new Date(sinceIso).getTime();
+  const ts = new Set<number>();
+
+  // 1) activity events
+  {
+    let q = sb.from("player_activity_events").select("occurred_at")
+      .eq("player_tag", playerTag).gte("occurred_at", sinceIso)
+      .order("occurred_at", { ascending: true });
+    if (untilIso) q = q.lt("occurred_at", untilIso);
+    const { data } = await q;
+    for (const r of (data ?? []) as any[]) ts.add(new Date(r.occurred_at).getTime());
+  }
+
+  // 2) donation_snapshots — walk per clan, include captured_at when any counter increased
+  //    Need a baseline snapshot just before sinceIso to detect first increase in window.
+  {
+    const { data: baseline } = await sb.from("donation_snapshots")
+      .select("clan_tag,donations,donations_received,attack_wins,defense_wins,captured_at")
+      .eq("player_tag", playerTag).lt("captured_at", sinceIso)
+      .order("captured_at", { ascending: false }).limit(20);
+    let q = sb.from("donation_snapshots")
+      .select("clan_tag,donations,donations_received,attack_wins,defense_wins,captured_at")
+      .eq("player_tag", playerTag).gte("captured_at", sinceIso)
+      .order("captured_at", { ascending: true });
+    if (untilIso) q = q.lt("captured_at", untilIso);
+    const { data } = await q;
+    const rows = (data ?? []) as any[];
+    const byClan = new Map<string, any[]>();
+    for (const r of rows) {
+      if (!byClan.has(r.clan_tag)) byClan.set(r.clan_tag, []);
+      byClan.get(r.clan_tag)!.push(r);
+    }
+    const baseByClan = new Map<string, any>();
+    for (const b of (baseline ?? []) as any[]) {
+      if (!baseByClan.has(b.clan_tag)) baseByClan.set(b.clan_tag, b);
+    }
+    for (const [clan, list] of byClan) {
+      let prev = baseByClan.get(clan) ?? null;
+      for (const cur of list) {
+        if (prev) {
+          const inc =
+            (cur.donations          > prev.donations) ||
+            (cur.donations_received > prev.donations_received) ||
+            (cur.attack_wins        > (prev.attack_wins  ?? 0)) ||
+            (cur.defense_wins       > (prev.defense_wins ?? 0));
+          if (inc) ts.add(new Date(cur.captured_at).getTime());
+        }
+        prev = cur;
+      }
+    }
+  }
+
+  // 3) war attacks
+  {
+    let q = sb.from("war_attacks").select("recorded_at")
+      .eq("attacker_tag", playerTag).gte("recorded_at", sinceIso)
+      .order("recorded_at", { ascending: true });
+    if (untilIso) q = q.lt("recorded_at", untilIso);
+    const { data } = await q;
+    for (const r of (data ?? []) as any[]) ts.add(new Date(r.recorded_at).getTime());
+  }
+
+  return Array.from(ts).filter((t) => t >= sinceMs && t < untilMs).sort((a, b) => a - b);
+}
+
 async function activityToday(playerTag: string) {
   const sb = adminClient();
   const since = istMidnightUtcIso();
-  const { data } = await sb
-    .from("player_activity_events")
-    .select("occurred_at")
-    .eq("player_tag", playerTag)
-    .gte("occurred_at", since)
-    .order("occurred_at", { ascending: true });
-  const rows = (data ?? []) as any[];
-  const { data: lastAll } = await sb
-    .from("player_activity_events")
-    .select("occurred_at")
-    .eq("player_tag", playerTag)
-    .order("occurred_at", { ascending: false })
-    .limit(1);
+  const todayTs = await collectActivityTimestamps(playerTag, since);
+
+  // last-ever across all sources
+  const [pae, snap, war] = await Promise.all([
+    sb.from("player_activity_events").select("occurred_at")
+      .eq("player_tag", playerTag).order("occurred_at", { ascending: false }).limit(1),
+    sb.from("donation_snapshots").select("captured_at")
+      .eq("player_tag", playerTag).order("captured_at", { ascending: false }).limit(1),
+    sb.from("war_attacks").select("recorded_at")
+      .eq("attacker_tag", playerTag).order("recorded_at", { ascending: false }).limit(1),
+  ]);
+  const candidates = [
+    pae.data?.[0]?.occurred_at,
+    snap.data?.[0]?.captured_at,
+    war.data?.[0]?.recorded_at,
+  ].filter(Boolean).map((s: any) => new Date(s).getTime());
+  const lastEver = candidates.length ? new Date(Math.max(...candidates)).toISOString() : null;
+
   return {
-    eventsToday: rows.length,
-    firstToday: rows[0]?.occurred_at ?? null,
-    lastToday: rows[rows.length - 1]?.occurred_at ?? null,
-    lastEver: lastAll?.[0]?.occurred_at ?? null,
+    eventsToday: todayTs.length,
+    firstToday: todayTs.length ? new Date(todayTs[0]).toISOString() : null,
+    lastToday: todayTs.length ? new Date(todayTs[todayTs.length - 1]).toISOString() : null,
+    lastEver,
   };
 }
 
-const IDLE_GAP_MS = 10 * 60_000; // >10 min gap = offline
-
 async function computeActiveTime(playerTag: string, sinceIso: string, untilIso?: string) {
-  const sb = adminClient();
-  let q = sb
-    .from("player_activity_events")
-    .select("occurred_at")
-    .eq("player_tag", playerTag)
-    .gte("occurred_at", sinceIso)
-    .order("occurred_at", { ascending: true });
-  if (untilIso) q = q.lt("occurred_at", untilIso);
-  const { data } = await q;
-  const rows = (data ?? []) as Array<{ occurred_at: string }>;
-  if (rows.length < 2) return { totalMs: 0, sessions: rows.length ? 1 : 0 };
+  const tsList = await collectActivityTimestamps(playerTag, sinceIso, untilIso);
+  if (tsList.length < 2) return { totalMs: 0, sessions: tsList.length };
   let total = 0;
   let sessions = 1;
-  let sessionStart = new Date(rows[0].occurred_at).getTime();
+  let sessionStart = tsList[0];
   let prev = sessionStart;
-  for (let i = 1; i < rows.length; i++) {
-    const t = new Date(rows[i].occurred_at).getTime();
+  for (let i = 1; i < tsList.length; i++) {
+    const t = tsList[i];
     if (t - prev > IDLE_GAP_MS) {
       total += prev - sessionStart;
       sessions++;
