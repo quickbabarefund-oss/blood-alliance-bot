@@ -1484,6 +1484,8 @@ Deno.serve(async (req) => {
         case "cwl_board": return await handleCocCmd(interaction, buildCwlBoard);
         case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
         case "compo": return await handleCocCmd(interaction, buildCompo);
+        case "player_activity": return await handleCocCmd(interaction, buildPlayerActivity);
+        case "player_joins": return await handleCocCmd(interaction, buildPlayerJoins);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
