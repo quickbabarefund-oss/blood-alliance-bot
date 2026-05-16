@@ -636,6 +636,8 @@ async function handleWarLastResult(interaction: any) {
   })();
   return deferred(true);
 }
+
+async function handleThEmoji(interaction: any) {
   const denied = await gate(interaction, "th_emoji"); if (denied) return denied;
   const sb = adminClient();
   const { sub, options } = getSubOptions(interaction.data.options);
