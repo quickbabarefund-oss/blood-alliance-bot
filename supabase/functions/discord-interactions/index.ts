@@ -1298,17 +1298,50 @@ Deno.serve(async (req) => {
     ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e));
   }
 
-  // Autocomplete: search Family clans for /clan_info, /compo, etc.
+  // Autocomplete: Family clans for /clan_info etc., or players table for /player_activity etc.
   if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE) {
     try {
       const cmdName = interaction.data?.name ?? "";
       const focused = (interaction.data?.options ?? []).find((o: any) => o.focused);
-      if (!COC_AUTOCOMPLETE_CMDS.has(cmdName) || !focused || focused.name !== "tag") {
+      if (!focused || focused.name !== "tag") {
         return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
       }
       const q = String(focused.value ?? "").trim().toLowerCase().replace(/^#/, "");
       const guildId = interaction.guild_id ?? "";
       const sb = adminClient();
+
+      if (PLAYER_AUTOCOMPLETE_CMDS.has(cmdName)) {
+        // Prefer players in this guild's Family clans, then global match by name/tag.
+        const { data: fam } = await sb.from("family_clans").select("clan_tag").eq("guild_id", guildId);
+        const famClanTags = (fam ?? []).map((r: any) => r.clan_tag);
+        let players: any[] = [];
+        if (q) {
+          const { data } = await sb.from("players")
+            .select("tag,name,current_clan_tag")
+            .or(`name.ilike.%${q.replace(/[%_]/g, "")}%,tag.ilike.%${q.toUpperCase()}%`)
+            .limit(50);
+          players = (data ?? []) as any[];
+        } else if (famClanTags.length) {
+          const { data } = await sb.from("players")
+            .select("tag,name,current_clan_tag")
+            .in("current_clan_tag", famClanTags)
+            .order("name")
+            .limit(25);
+          players = (data ?? []) as any[];
+        }
+        // Sort: family-clan members first
+        const famSet = new Set(famClanTags);
+        players.sort((a, b) => Number(famSet.has(b.current_clan_tag)) - Number(famSet.has(a.current_clan_tag)));
+        const choices = players.slice(0, 25).map((p) => ({
+          name: `${p.name || p.tag} (${p.tag})`.slice(0, 100),
+          value: p.tag,
+        }));
+        return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices } }), { headers: { "Content-Type": "application/json" } });
+      }
+
+      if (!COC_AUTOCOMPLETE_CMDS.has(cmdName)) {
+        return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
+      }
       const { data: rows } = await sb.from("family_clans")
         .select("clan_tag,clan_name,category_id,position")
         .eq("guild_id", guildId)
