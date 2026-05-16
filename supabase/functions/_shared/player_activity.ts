@@ -349,9 +349,10 @@ export async function buildPlayerActivity(
       `Clan: ${currentClanLabel}${linkedLine ? `  •  ${linkedLine}` : ""}`,
       "",
       activityLine,
+      activeTimeLine,
       "",
       `**Activity (${monthLabel} IST)**`,
-      tableHeader + rowDon + rowRecv + rowRat + rowAtk + rowWar + rowStar + rowMiss,
+      tableHeader + rowDon + rowRecv + rowRat + rowAtk + rowWar + rowStar + rowMiss + rowAct,
     ].join("\n"),
     color: 0x5865F2,
     fields: [
