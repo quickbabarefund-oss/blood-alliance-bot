@@ -333,6 +333,7 @@ export async function buildPlayerActivity(
     }
     return `🕒 **Active today:** ${act.eventsToday} events  •  last active **${fmtAgo(act.lastToday)}**`;
   })();
+  const activeTimeLine = `⏱️ **Approx active time** — today: **${fmtDur(actToday.totalMs)}**  •  avg/day 7d: **${fmtDur(avg7)}**  •  30d: **${fmtDur(avg30)}**  •  month: **${fmtDur(avgMo)}**`;
 
   const stayLines = stays.length
     ? stays.slice(0, 8).map((s) => `• **${names.get(s.clan_tag) ?? "Unknown"}** \`${s.clan_tag}\` — ${s.days} day${s.days === 1 ? "" : "s"}${s.ongoing ? " (ongoing)" : ""}`).join("\n")
