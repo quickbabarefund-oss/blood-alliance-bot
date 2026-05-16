@@ -271,11 +271,14 @@ export function evaluateRules(opts: {
   endTime: Date;
   ourMembers: WarMember[];
   oppMembers?: WarMember[];
+  // Map of `${attackerTag}:${order}` -> first-observed timestamp (war_attacks.recorded_at).
+  // Used to decide whether an attack happened inside the last-8h cleanup window.
+  attackTimes?: Record<string, Date | string>;
 }): RuleBreak[] {
   const breaks: RuleBreak[] = [];
   const last8Start = new Date(opts.endTime.getTime() - 8 * 3600_000);
+  const times = opts.attackTimes ?? {};
 
-  // Defender position lookup — defenders live in OPPONENT roster, not ours.
   const posMap: Record<string, number> = {};
   for (const m of (opts.oppMembers ?? [])) posMap[m.tag] = m.mapPosition;
 
@@ -283,7 +286,6 @@ export function evaluateRules(opts: {
     const attacks = (m.attacks ?? []).slice().sort((a, b) => a.order - b.order);
     const myPos = m.mapPosition;
 
-    // missed attacks
     if (attacks.length < 2) {
       breaks.push({
         player_tag: m.tag, player_name: m.name,
@@ -292,54 +294,66 @@ export function evaluateRules(opts: {
       });
     }
 
-    // 1st attack mirror rule
+    // 1st attack mirror rule — clearer wording
     if (attacks.length >= 1) {
       const a = attacks[0];
       const defPos = posMap[a.defenderTag] ?? -999;
       const isMirror = defPos === myPos;
-      if (opts.decision === "win") {
-        if (!isMirror || a.stars < 3) {
-          breaks.push({
-            player_tag: m.tag, player_name: m.name,
-            rule: "mirror_first",
-            detail: `1st attack ${isMirror ? "mirror" : `pos ${defPos} (own ${myPos})`} got ${a.stars}⭐ — expected mirror 3⭐`,
-          });
-        }
-      } else {
-        if (!isMirror || a.stars < 2) {
-          breaks.push({
-            player_tag: m.tag, player_name: m.name,
-            rule: "mirror_first",
-            detail: `1st attack ${isMirror ? "mirror" : `pos ${defPos} (own ${myPos})`} got ${a.stars}⭐ — expected mirror 2⭐`,
-          });
-        }
+      const minStars = opts.decision === "win" ? 3 : 2;
+      if (!isMirror) {
+        breaks.push({
+          player_tag: m.tag, player_name: m.name,
+          rule: "mirror_first",
+          detail: `1st attack should mirror own #${myPos} for ${minStars}⭐ — hit #${defPos} for ${a.stars}⭐`,
+        });
+      } else if (a.stars < minStars) {
+        breaks.push({
+          player_tag: m.tag, player_name: m.name,
+          rule: "mirror_first",
+          detail: `1st attack mirrored own #${myPos} but only got ${a.stars}⭐ (need ${minStars}⭐)`,
+        });
       }
     }
 
-    // Window rules per attack
-    // Note: CoC API doesn't timestamp individual attacks; use attack order as proxy isn't perfect.
-    // We approximate: if war has reached last8 window AND this attack hasn't been logged yet at recording time,
-    // we treat newly-observed attacks as "current window" (handled by war-poll when inserting).
-    // Here, evaluate retrospectively by ALL attacks based on whether attack passes minimum stars.
+    // Per-attack rules
     for (let i = 0; i < attacks.length; i++) {
       const a = attacks[i];
-      const minWin = i === 0 ? 3 : 2; // win war: any 2nd attack >= 2
-      const minLose = i === 0 ? 2 : 1;
+      const tsRaw = times[`${m.tag}:${a.order}`];
+      const ts = tsRaw ? (tsRaw instanceof Date ? tsRaw : new Date(tsRaw)) : null;
+      const inCleanup = ts ? ts >= last8Start : false;
+
       if (opts.decision === "win") {
-        if (a.stars < 2) {
-          breaks.push({ player_tag: m.tag, player_name: m.name, rule: "low_stars",
-            detail: `Attack #${a.order} got ${a.stars}⭐ (min ${minWin === 3 && i === 0 ? "3⭐ mirror" : "2⭐"})` });
+        // 2nd attack must be inside last-8h cleanup window. Early 2nd attacks (esp. 3⭐ steals) = violation.
+        if (i >= 1 && ts && !inCleanup) {
+          breaks.push({
+            player_tag: m.tag, player_name: m.name,
+            rule: "early_cleanup",
+            detail: `2nd attack #${a.order} done before last-8h cleanup window (got ${a.stars}⭐)`,
+          });
+        }
+        // Low-star: 1st handled by mirror_first; 2nd needs ≥2⭐ unless in cleanup window (then 1⭐ ok).
+        if (i >= 1 && a.stars < 2) {
+          if (!(inCleanup && a.stars >= 1)) {
+            breaks.push({
+              player_tag: m.tag, player_name: m.name,
+              rule: "low_stars",
+              detail: `2nd attack #${a.order} got ${a.stars}⭐ (need 2⭐${inCleanup ? "" : ", or 1⭐ inside last-8h cleanup"})`,
+            });
+          }
         }
       } else {
+        // Lose war: any attack must get ≥1⭐
         if (a.stars < 1) {
-          breaks.push({ player_tag: m.tag, player_name: m.name, rule: "low_stars",
-            detail: `Attack #${a.order} got 0⭐ (min ${minLose}⭐)` });
+          breaks.push({
+            player_tag: m.tag, player_name: m.name,
+            rule: "low_stars",
+            detail: `Attack #${a.order} got 0⭐ (need 1⭐)`,
+          });
         }
       }
     }
   }
 
-  // Dedupe (player + rule + detail)
   const seen = new Set<string>();
   return breaks.filter((b) => {
     const k = `${b.player_tag}|${b.rule}|${b.detail}`;
