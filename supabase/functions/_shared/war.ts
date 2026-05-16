@@ -155,7 +155,14 @@ export async function buildRepsPayload(opts: {
 }
 
 // Build a war-started or reminder message as plain content (so mentions actually ping users).
-// Returns { content, allowed_mentions } — no embed, since embed mentions don't trigger notifications.
+// Format:
+//   ⏰ **12h Remaining in War**
+//   **CLAN** vs **OPPONENT**
+//   ⚔️ 12/50   ⭐ 32/75
+//   🕒 <t:...:F> (<t:...:R>)
+//
+//   Remaining (38/50):
+//   (0/2) {TH} name | `#TAG` @mention
 export async function buildReminderPayload(opts: {
   reminderLabel: string; // "War Started" or "2h reminder"
   emoji: string;
@@ -169,6 +176,8 @@ export async function buildReminderPayload(opts: {
   const ours = opts.current.clan!;
   const opp = opts.current.opponent!;
   const members = ours.members ?? [];
+  const teamSize = opts.current.teamSize ?? members.length;
+  const maxAttacks = teamSize * 2;
 
   // Pull discord links for these tags
   const tags = members.map((m) => m.tag);
@@ -180,26 +189,55 @@ export async function buildReminderPayload(opts: {
     }
   }
 
+  // Stats
+  let usedAttacks = 0;
+  let starsEarned = 0;
+  for (const m of members) {
+    const atks = m.attacks ?? [];
+    usedAttacks += atks.length;
+    for (const a of atks) starsEarned += a.stars;
+  }
+  const remainingCount = members.filter((m) => (m.attacks?.length ?? 0) < 2).length;
+
   const mentionedUsers: string[] = [];
-  const lines = members
+  // Sort: TH desc, then map position asc
+  const sorted = members.slice().sort((a, b) => (b.townhallLevel - a.townhallLevel) || (a.mapPosition - b.mapPosition));
+  const lines = sorted
     .map((m) => {
       const used = m.attacks?.length ?? 0;
-      const left = 2 - used; // standard war = 2 attacks each
+      const left = 2 - used;
       if (left <= 0) return null;
       let mention = "";
       if (links[m.tag]) {
-        mention = `<@${links[m.tag]}>`;
+        mention = ` | <@${links[m.tag]}>`;
         mentionedUsers.push(links[m.tag]);
       }
-      return `⚔️ ${left}/2 | ${thEmoji(thMap, m.townhallLevel)} **${m.name}** | \`${m.tag}\` ${mention}`.trim();
+      return `(${used}/2) ${thEmoji(thMap, m.townhallLevel)} ${m.name} | \`${m.tag}\`${mention}`;
     })
-    .filter(Boolean)
-    .join("\n");
+    .filter(Boolean) as string[];
 
-  const header = `${opts.emoji} **${opts.reminderLabel}** — ${ours.name} \`${ours.tag}\` **VS** ${opp.name} \`${opp.tag}\``;
-  const body = lines || "✅ All attacks used!";
-  // Discord caps content at 2000 chars
-  let content = `${header}\n${body}`.slice(0, 1990);
+  // Header: "12h Remaining in War" (or label override for war_started)
+  const endTs = parseCocTime(opts.current.endTime ?? "")?.getTime();
+  const nowMs = Date.now();
+  let headerLabel = opts.reminderLabel;
+  if (opts.slot !== "war_started" && endTs) {
+    const minsLeft = Math.max(0, Math.round((endTs - nowMs) / 60000));
+    const hrs = Math.floor(minsLeft / 60);
+    const mins = minsLeft % 60;
+    headerLabel = hrs >= 1
+      ? `${hrs}h${mins ? ` ${mins}m` : ""} Remaining in War`
+      : `${mins}m Remaining in War`;
+  }
+
+  const headLine1 = `${opts.emoji} **${headerLabel}**`;
+  const headLine2 = `**${ours.name}** vs **${opp.name}**`;
+  const statsLine = `⚔️ ${usedAttacks}/${maxAttacks}   ⭐ ${starsEarned}/${teamSize * 3}`;
+  const timeLine = endTs ? `🕒 <t:${Math.floor(endTs / 1000)}:F> (<t:${Math.floor(endTs / 1000)}:R>)` : "";
+
+  // Body (may need to be chunked to fit 2000 chars; we keep it simple and slice)
+  const remainingHeader = `Remaining (${remainingCount}/${teamSize}):`;
+  const body = lines.length ? `${remainingHeader}\n${lines.join("\n")}` : "✅ All attacks used!";
+  let content = [headLine1, headLine2, statsLine, timeLine, "", body].filter(Boolean).join("\n").slice(0, 1990);
 
   // Dedupe user IDs and cap to 100 (Discord limit)
   const uniqueUsers = Array.from(new Set(mentionedUsers)).slice(0, 100);
