@@ -19,6 +19,8 @@ export interface CoCMember {
   townHallLevel?: number;
   donations?: number;
   donationsReceived?: number;
+  attackWins?: number;
+  defenseWins?: number;
 }
 
 export interface CoCClan {
