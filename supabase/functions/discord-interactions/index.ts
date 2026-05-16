@@ -1342,6 +1342,7 @@ Deno.serve(async (req) => {
         case "war_track_list": return await handleWarTrackList(interaction);
         case "war_track_remove": return await handleWarTrackRemove(interaction);
         case "war_resend_result": return await handleWarResendResult(interaction);
+        case "war_last_result": return await handleWarLastResult(interaction);
         case "force_reset": return await handleForceReset(interaction);
         case "donation_reset": return await handleDonationReset(interaction);
         case "family_category": return await handleFamilyCategory(interaction);
