@@ -16,6 +16,7 @@ import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
   buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
 } from "../_shared/coc_commands.ts";
+import { buildPlayerActivity, buildPlayerJoins } from "../_shared/player_activity.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
