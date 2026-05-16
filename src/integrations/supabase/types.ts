@@ -35,6 +35,33 @@ export type Database = {
         }
         Relationships: []
       }
+      clan_member_events: {
+        Row: {
+          clan_tag: string
+          event: string
+          id: number
+          occurred_at: string
+          player_name: string | null
+          player_tag: string
+        }
+        Insert: {
+          clan_tag: string
+          event: string
+          id?: number
+          occurred_at?: string
+          player_name?: string | null
+          player_tag: string
+        }
+        Update: {
+          clan_tag?: string
+          event?: string
+          id?: number
+          occurred_at?: string
+          player_name?: string | null
+          player_tag?: string
+        }
+        Relationships: []
+      }
       clans: {
         Row: {
           active: boolean
@@ -139,24 +166,30 @@ export type Database = {
       }
       donation_snapshots: {
         Row: {
+          attack_wins: number
           captured_at: string
           clan_tag: string
+          defense_wins: number
           donations: number
           donations_received: number
           id: number
           player_tag: string
         }
         Insert: {
+          attack_wins?: number
           captured_at?: string
           clan_tag: string
+          defense_wins?: number
           donations?: number
           donations_received?: number
           id?: number
           player_tag: string
         }
         Update: {
+          attack_wins?: number
           captured_at?: string
           clan_tag?: string
+          defense_wins?: number
           donations?: number
           donations_received?: number
           id?: number
@@ -403,6 +436,30 @@ export type Database = {
           player_name?: string
           player_tag?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      player_activity_events: {
+        Row: {
+          clan_tag: string | null
+          id: number
+          kind: string
+          occurred_at: string
+          player_tag: string
+        }
+        Insert: {
+          clan_tag?: string | null
+          id?: number
+          kind: string
+          occurred_at?: string
+          player_tag: string
+        }
+        Update: {
+          clan_tag?: string | null
+          id?: number
+          kind?: string
+          occurred_at?: string
+          player_tag?: string
         }
         Relationships: []
       }
