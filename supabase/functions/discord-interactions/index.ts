@@ -1180,6 +1180,8 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   cwl_board: buildCwlBoard,
   capital_raids: buildCapitalRaids,
   compo: buildCompo,
+  player_activity: buildPlayerActivity,
+  player_joins: buildPlayerJoins,
 };
 
 async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
