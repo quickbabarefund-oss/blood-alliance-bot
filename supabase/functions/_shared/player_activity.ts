@@ -127,6 +127,51 @@ async function activityToday(playerTag: string) {
   };
 }
 
+const IDLE_GAP_MS = 10 * 60_000; // >10 min gap = offline
+
+async function computeActiveTime(playerTag: string, sinceIso: string, untilIso?: string) {
+  const sb = adminClient();
+  let q = sb
+    .from("player_activity_events")
+    .select("occurred_at")
+    .eq("player_tag", playerTag)
+    .gte("occurred_at", sinceIso)
+    .order("occurred_at", { ascending: true });
+  if (untilIso) q = q.lt("occurred_at", untilIso);
+  const { data } = await q;
+  const rows = (data ?? []) as Array<{ occurred_at: string }>;
+  if (rows.length < 2) return { totalMs: 0, sessions: rows.length ? 1 : 0 };
+  let total = 0;
+  let sessions = 1;
+  let sessionStart = new Date(rows[0].occurred_at).getTime();
+  let prev = sessionStart;
+  for (let i = 1; i < rows.length; i++) {
+    const t = new Date(rows[i].occurred_at).getTime();
+    if (t - prev > IDLE_GAP_MS) {
+      total += prev - sessionStart;
+      sessions++;
+      sessionStart = t;
+    }
+    prev = t;
+  }
+  total += prev - sessionStart;
+  return { totalMs: total, sessions };
+}
+
+function fmtDur(ms: number): string {
+  if (ms <= 0) return "0m";
+  const m = Math.floor(ms / 60_000);
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  if (h > 0) return `${h}h${rem}m`;
+  return `${m}m`;
+}
+
+function daysElapsedInIstMonth(): number {
+  const nowIst = new Date(Date.now() + IST_OFFSET_MIN * 60_000);
+  return nowIst.getUTCDate(); // day-of-month in IST, ≥1
+}
+
 async function recentMoves(playerTag: string) {
   const sb = adminClient();
   const since = isoNDaysAgo(30);
@@ -223,7 +268,7 @@ export async function buildPlayerActivity(
   const since30d = isoNDaysAgo(30);
   const sinceMo  = istMonthStartUtcIso();
 
-  const [donToday, don7d, don30d, donMo, warToday, war7d, war30d, warMo, act, moves, stays] = await Promise.all([
+  const [donToday, don7d, don30d, donMo, warToday, war7d, war30d, warMo, act, moves, stays, actToday, act7d, act30d, actMo] = await Promise.all([
     aggregateDonations(tag, sinceToday),
     aggregateDonations(tag, since7d),
     aggregateDonations(tag, since30d),
@@ -235,7 +280,15 @@ export async function buildPlayerActivity(
     activityToday(tag),
     recentMoves(tag),
     stayDaysByClan(tag),
+    computeActiveTime(tag, sinceToday),
+    computeActiveTime(tag, since7d),
+    computeActiveTime(tag, since30d),
+    computeActiveTime(tag, sinceMo),
   ]);
+  const monthDays = daysElapsedInIstMonth();
+  const avg7  = act7d.totalMs  / 7;
+  const avg30 = act30d.totalMs / 30;
+  const avgMo = actMo.totalMs  / Math.max(1, monthDays);
 
   // Clan name lookup for current + moves + stays
   const tagsForNames = new Set<string>();
@@ -267,7 +320,8 @@ export async function buildPlayerActivity(
   const rowAtk  = `Atk wins   ${fmtNum(donToday.attackWins).padEnd(8)} ${fmtNum(don7d.attackWins).padEnd(7)} ${fmtNum(don30d.attackWins).padEnd(7)} ${fmtNum(donMo.attackWins)}\n`;
   const rowWar  = `War atks   ${(warToday.used + "/" + warToday.allowed).padEnd(8)} ${(war7d.used + "/" + war7d.allowed).padEnd(7)} ${(war30d.used + "/" + war30d.allowed).padEnd(7)} ${warMo.used + "/" + warMo.allowed}\n`;
   const rowStar = `War ⭐avg  ${String(warToday.avgStars).padEnd(8)} ${String(war7d.avgStars).padEnd(7)} ${String(war30d.avgStars).padEnd(7)} ${warMo.avgStars}\n`;
-  const rowMiss = `Missed     ${String(warToday.missed).padEnd(8)} ${String(war7d.missed).padEnd(7)} ${String(war30d.missed).padEnd(7)} ${warMo.missed}\n\`\`\``;
+  const rowMiss = `Missed     ${String(warToday.missed).padEnd(8)} ${String(war7d.missed).padEnd(7)} ${String(war30d.missed).padEnd(7)} ${warMo.missed}\n`;
+  const rowAct  = `Active     ${fmtDur(actToday.totalMs).padEnd(8)} ${fmtDur(act7d.totalMs).padEnd(7)} ${fmtDur(act30d.totalMs).padEnd(7)} ${fmtDur(actMo.totalMs)}\n\`\`\``;
 
   const currentClanLabel = player.current_clan_tag
     ? `${names.get(player.current_clan_tag) ?? "Unknown"} \`${player.current_clan_tag}\``
@@ -279,6 +333,7 @@ export async function buildPlayerActivity(
     }
     return `🕒 **Active today:** ${act.eventsToday} events  •  last active **${fmtAgo(act.lastToday)}**`;
   })();
+  const activeTimeLine = `⏱️ **Approx active time** — today: **${fmtDur(actToday.totalMs)}**  •  avg/day 7d: **${fmtDur(avg7)}**  •  30d: **${fmtDur(avg30)}**  •  month: **${fmtDur(avgMo)}**`;
 
   const stayLines = stays.length
     ? stays.slice(0, 8).map((s) => `• **${names.get(s.clan_tag) ?? "Unknown"}** \`${s.clan_tag}\` — ${s.days} day${s.days === 1 ? "" : "s"}${s.ongoing ? " (ongoing)" : ""}`).join("\n")
@@ -294,16 +349,17 @@ export async function buildPlayerActivity(
       `Clan: ${currentClanLabel}${linkedLine ? `  •  ${linkedLine}` : ""}`,
       "",
       activityLine,
+      activeTimeLine,
       "",
       `**Activity (${monthLabel} IST)**`,
-      tableHeader + rowDon + rowRecv + rowRat + rowAtk + rowWar + rowStar + rowMiss,
+      tableHeader + rowDon + rowRecv + rowRat + rowAtk + rowWar + rowStar + rowMiss + rowAct,
     ].join("\n"),
     color: 0x5865F2,
     fields: [
       { name: "🗓️ Total stay (tracked)", value: stayLines, inline: false },
       { name: "🔁 Clan moves (30d)", value: moveLines, inline: false },
     ],
-    footer: { text: "Activity = observed deltas between polls (~hourly). Wars cover bot-tracked wars only." },
+    footer: { text: "Active time approx: sessions split on >10 min idle. Polls ~5 min. Wars cover bot-tracked wars only." },
   };
   return { embeds: [embed], allowed_mentions: { parse: [] } };
 }
