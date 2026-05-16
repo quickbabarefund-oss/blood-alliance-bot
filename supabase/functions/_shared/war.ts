@@ -374,6 +374,15 @@ export async function buildResultEmbeds(opts: {
   const okEmoji = "<a:tick:1447242811949711441>";
   const noEmoji = "<a:cross:1477055818229878915>";
   const allOk = violators.size === 0;
+  const teamSize = w.team_size ?? opts.ourMembers.length;
+  const maxAttacks = teamSize * 2;
+  let usedAttacks = 0;
+  let missedCount = 0;
+  for (const m of opts.ourMembers) {
+    const used = m.attacks?.length ?? 0;
+    usedAttacks += used;
+    if (used < 2) missedCount += (2 - used);
+  }
 
   const page1: any = {
     title: `${w.clan_name ?? w.clan_tag} vs ${w.opponent_name ?? w.opponent_tag} — Final Result`,
@@ -385,6 +394,8 @@ export async function buildResultEmbeds(opts: {
       { name: "Decision", value: (w.decision ?? "—").toUpperCase(), inline: true },
       { name: "Stars", value: `${w.our_stars ?? 0} vs ${w.opp_stars ?? 0}`, inline: true },
       { name: "Destruction", value: `${(w.our_destruction ?? 0).toFixed?.(2) ?? w.our_destruction ?? 0}% vs ${(w.opp_destruction ?? 0).toFixed?.(2) ?? w.opp_destruction ?? 0}%`, inline: true },
+      { name: "Attacks Used", value: `${usedAttacks}/${maxAttacks}`, inline: true },
+      { name: "Missed Attacks", value: String(missedCount), inline: true },
       { name: "Rules followed 100%", value: allOk ? okEmoji : noEmoji, inline: true },
       { name: "Compliant Players", value: String(compliantCount), inline: true },
       { name: "Players Breaking Rules", value: String(violators.size), inline: true },
