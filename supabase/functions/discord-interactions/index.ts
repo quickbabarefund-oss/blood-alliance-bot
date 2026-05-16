@@ -813,6 +813,8 @@ function handleHelp(_interaction: any): Response {
         "`/cwl_roster [tag] [user]` — Full CWL roster",
         "`/cwl_board [tag] [user]` — CWL leaderboard image",
         "`/capital_raids [tag] [user]` — Latest Clan Capital raid weekend",
+        "`/player_activity [tag] [user]` — Today / 7d / 30d / month activity + last-seen + stays",
+        "`/player_joins [tag] [user]` — Player's join/leave history & total stay per clan",
         "_Tip: type a clan tag to autocomplete from this server's Family clans._",
       ],
     },
