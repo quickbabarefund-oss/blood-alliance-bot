@@ -588,21 +588,37 @@ async function handleWarLastResult(interaction: any) {
         .order("end_time", { ascending: false }).limit(1).maybeSingle();
       if (!war) { await followUp(appId, token, `⚠️ No ended war found for \`${clanTag}\`.`, true); return; }
 
-      // Fresh roster (best effort) — fall back to raw_roster
-      let cw: CurrentWar | null = null;
-      try { cw = await postCoc<CurrentWar>({ action: "current_war", tag: clanTag }); } catch (_) {}
-      const ourMembers = (cw?.clan?.members ?? (war.raw_roster as any)?.clan ?? []) as any[];
-      const oppMembers = (cw?.opponent?.members ?? (war.raw_roster as any)?.opponent ?? []) as any[];
+      // Use stored roster from when the war was active (NOT live current_war — that's a different war).
+      const rosterOur = ((war.raw_roster as any)?.clan ?? []) as any[];
+      const rosterOpp = ((war.raw_roster as any)?.opponent ?? []) as any[];
 
-      const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
-      const decision = (war.decision ?? war.result ?? "win") as "win" | "lose";
-
+      // Pull stored attacks for this specific war and merge into members so attack counts are correct.
       const { data: atkRows } = await sb.from("war_attacks")
-        .select("attacker_tag,attack_order,recorded_at").eq("war_id", war.id);
-      const attackTimes: Record<string, string> = {};
-      for (const r of (atkRows ?? []) as any[]) attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
+        .select("attacker_tag,defender_tag,stars,destruction,attack_order,recorded_at")
+        .eq("war_id", war.id);
+      const byAttacker: Record<string, any[]> = {};
+      for (const r of (atkRows ?? []) as any[]) {
+        (byAttacker[r.attacker_tag] ??= []).push({
+          attackerTag: r.attacker_tag, defenderTag: r.defender_tag,
+          stars: r.stars, destructionPercentage: r.destruction, order: r.attack_order,
+        });
+      }
+      const ourMembers = rosterOur.map((m: any) => ({ ...m, attacks: byAttacker[m.tag] ?? [] }));
+      const oppMembers = rosterOpp;
 
-      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers, attackTimes });
+      // Prefer stored breaks (computed when war ended). Re-evaluate only if none stored.
+      let breaks: any[] = [];
+      const { data: storedBreaks } = await sb.from("war_rule_breaks")
+        .select("player_tag,player_name,rule,detail").eq("war_id", war.id);
+      if (storedBreaks?.length) {
+        breaks = storedBreaks as any[];
+      } else {
+        const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
+        const decision = (war.decision ?? war.result ?? "win") as "win" | "lose";
+        const attackTimes: Record<string, string> = {};
+        for (const r of (atkRows ?? []) as any[]) attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
+        breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers, attackTimes });
+      }
 
       if (mode === "full") {
         const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
