@@ -535,7 +535,13 @@ async function handleWarResendResult(interaction: any) {
   const decision = (war.decision ?? result) as "win" | "lose";
   const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
 
-  const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers });
+  const { data: atkRows } = await sb.from("war_attacks")
+    .select("attacker_tag,attack_order,recorded_at").eq("war_id", war.id);
+  const attackTimes: Record<string, string> = {};
+  for (const r of (atkRows ?? []) as any[]) {
+    attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
+  }
+  const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers, attackTimes });
   await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
   if (breaks.length) {
     await sb.from("war_rule_breaks").insert(breaks.map((b) => ({
