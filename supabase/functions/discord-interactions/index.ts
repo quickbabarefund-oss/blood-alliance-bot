@@ -827,6 +827,7 @@ function handleHelp(_interaction: any): Response {
         "`/war_track_list` — List war-tracked clans in this server *(admin)*",
         "`/war_track_remove <clan>` — Stop war tracking for a clan *(admin)*",
         "`/war_resend_result <clan>` — Re-evaluate & repost latest war result *(admin)*",
+        "`/war_last_result <clan> [mode]` — Show last ended war's violations (ephemeral) or full repost *(admin)*",
       ],
     },
     {
