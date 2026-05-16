@@ -211,6 +211,16 @@ export const COMMANDS: any[] = [
     ],
   },
   {
+    name: "war_last_result", description: "Show the last ended war's result or rule violations",
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag", required: true },
+      { type: STRING, name: "mode", description: "violations (ephemeral) or full (repost to log channel)", required: false, choices: [
+        { name: "violations", value: "violations" },
+        { name: "full", value: "full" },
+      ]},
+    ],
+  },
+  {
     name: "help", description: "Show all available bot commands and what they do",
   },
   {
