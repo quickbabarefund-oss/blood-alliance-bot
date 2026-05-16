@@ -127,6 +127,51 @@ async function activityToday(playerTag: string) {
   };
 }
 
+const IDLE_GAP_MS = 10 * 60_000; // >10 min gap = offline
+
+async function computeActiveTime(playerTag: string, sinceIso: string, untilIso?: string) {
+  const sb = adminClient();
+  let q = sb
+    .from("player_activity_events")
+    .select("occurred_at")
+    .eq("player_tag", playerTag)
+    .gte("occurred_at", sinceIso)
+    .order("occurred_at", { ascending: true });
+  if (untilIso) q = q.lt("occurred_at", untilIso);
+  const { data } = await q;
+  const rows = (data ?? []) as Array<{ occurred_at: string }>;
+  if (rows.length < 2) return { totalMs: 0, sessions: rows.length ? 1 : 0 };
+  let total = 0;
+  let sessions = 1;
+  let sessionStart = new Date(rows[0].occurred_at).getTime();
+  let prev = sessionStart;
+  for (let i = 1; i < rows.length; i++) {
+    const t = new Date(rows[i].occurred_at).getTime();
+    if (t - prev > IDLE_GAP_MS) {
+      total += prev - sessionStart;
+      sessions++;
+      sessionStart = t;
+    }
+    prev = t;
+  }
+  total += prev - sessionStart;
+  return { totalMs: total, sessions };
+}
+
+function fmtDur(ms: number): string {
+  if (ms <= 0) return "0m";
+  const m = Math.floor(ms / 60_000);
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  if (h > 0) return `${h}h${rem}m`;
+  return `${m}m`;
+}
+
+function daysElapsedInIstMonth(): number {
+  const nowIst = new Date(Date.now() + IST_OFFSET_MIN * 60_000);
+  return nowIst.getUTCDate(); // day-of-month in IST, ≥1
+}
+
 async function recentMoves(playerTag: string) {
   const sb = adminClient();
   const since = isoNDaysAgo(30);
