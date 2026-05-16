@@ -64,6 +64,7 @@ const COC_AUTOCOMPLETE_CMDS = new Set([
   "clan_info","current_war","war_log","clan_members",
   "cwl","cwl_roster","cwl_board","capital_raids","compo",
 ]);
+const PLAYER_AUTOCOMPLETE_CMDS = new Set(["player_activity","player_joins"]);
 
 const COLOR_GREEN = 0x57F287;
 const COLOR_RED = 0xED4245;
