@@ -359,7 +359,7 @@ export async function buildPlayerActivity(
       { name: "🗓️ Total stay (tracked)", value: stayLines, inline: false },
       { name: "🔁 Clan moves (30d)", value: moveLines, inline: false },
     ],
-    footer: { text: "Activity = observed deltas between polls (~hourly). Wars cover bot-tracked wars only." },
+    footer: { text: "Active time approx: sessions split on >10 min idle. Polls ~5 min. Wars cover bot-tracked wars only." },
   };
   return { embeds: [embed], allowed_mentions: { parse: [] } };
 }
