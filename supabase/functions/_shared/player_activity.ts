@@ -320,7 +320,8 @@ export async function buildPlayerActivity(
   const rowAtk  = `Atk wins   ${fmtNum(donToday.attackWins).padEnd(8)} ${fmtNum(don7d.attackWins).padEnd(7)} ${fmtNum(don30d.attackWins).padEnd(7)} ${fmtNum(donMo.attackWins)}\n`;
   const rowWar  = `War atks   ${(warToday.used + "/" + warToday.allowed).padEnd(8)} ${(war7d.used + "/" + war7d.allowed).padEnd(7)} ${(war30d.used + "/" + war30d.allowed).padEnd(7)} ${warMo.used + "/" + warMo.allowed}\n`;
   const rowStar = `War ⭐avg  ${String(warToday.avgStars).padEnd(8)} ${String(war7d.avgStars).padEnd(7)} ${String(war30d.avgStars).padEnd(7)} ${warMo.avgStars}\n`;
-  const rowMiss = `Missed     ${String(warToday.missed).padEnd(8)} ${String(war7d.missed).padEnd(7)} ${String(war30d.missed).padEnd(7)} ${warMo.missed}\n\`\`\``;
+  const rowMiss = `Missed     ${String(warToday.missed).padEnd(8)} ${String(war7d.missed).padEnd(7)} ${String(war30d.missed).padEnd(7)} ${warMo.missed}\n`;
+  const rowAct  = `Active     ${fmtDur(actToday.totalMs).padEnd(8)} ${fmtDur(act7d.totalMs).padEnd(7)} ${fmtDur(act30d.totalMs).padEnd(7)} ${fmtDur(actMo.totalMs)}\n\`\`\``;
 
   const currentClanLabel = player.current_clan_tag
     ? `${names.get(player.current_clan_tag) ?? "Unknown"} \`${player.current_clan_tag}\``
