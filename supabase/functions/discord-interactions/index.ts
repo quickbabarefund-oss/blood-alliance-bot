@@ -788,107 +788,128 @@ async function handleDonationReset(interaction: any): Promise<Response> {
 }
 
 // --- /help ---
-function handleHelp(_interaction: any): Response {
-  const sections: { title: string; lines: string[] }[] = [
-    {
-      title: "📊 Leaderboards & Stats",
-      lines: [
-        "`/top [clan] [count]` — Top donators this month",
-        "`/lowest [clan] [count]` — Lowest donators this month",
-        "`/player <tag>` — Player history & monthly totals",
-        "`/refresh [clan]` — Force immediate poll & leaderboard refresh *(admin)*",
-        "`/donation_reset [clan_tag]` — Reset this month's donation totals *(admin)*",
-      ],
-    },
-    {
-      title: "🔍 Clash of Clans Lookups",
-      lines: [
-        "`/player_info [tag] [user]` — TH, heroes, donations, war stars",
-        "`/clan_info [tag] [user]` — Level, league, members, war record",
-        "`/clan_members [tag] [user]` — Members sorted by donations",
-        "`/compo [tag] [user]` — Town Hall composition breakdown",
-        "`/current_war [tag] [user]` — Live current-war status",
-        "`/war_log [tag] [user]` — Last 10 regular wars",
-        "`/cwl [tag] [user]` — Current CWL status / round",
-        "`/cwl_roster [tag] [user]` — Full CWL roster",
-        "`/cwl_board [tag] [user]` — CWL leaderboard image",
-        "`/capital_raids [tag] [user]` — Latest Clan Capital raid weekend",
-        "`/player_activity [tag] [user]` — Today / 7d / 30d / month activity + last-seen + stays",
-        "`/player_joins [tag] [user]` — Player's join/leave history & total stay per clan",
-        "_Tip: type a clan tag to autocomplete from this server's Family clans._",
-      ],
-    },
-    {
-      title: "🛡️ Clan Setup",
-      lines: [
-        "`/clan add <tag> <channel>` — Track a clan & bind leaderboard channel *(admin)*",
-        "`/clan remove <tag>` — Stop tracking a clan *(admin)*",
-        "`/clan list` — List tracked clans in this server",
-        "`/global setchannel <channel>` — Bind global alliance leaderboard *(admin)*",
-      ],
-    },
-    {
-      title: "🏛️ Family Dashboard",
-      lines: [
-        "`/family_category add|remove|rename|list` — Manage categories *(admin)*",
-        "`/family_clan add|remove|move|list` — Manage clans in categories *(admin)*",
-        "`/family_clan_dashboard [channel]` — Post / re-bind the dashboard message *(admin)*",
-        "`/family_customize ...` — Title, color, footer, line format, images *(admin)*",
-        "`/embed_editor` — Open the web-based embed builder *(admin)*",
-      ],
-    },
-    {
-      title: "⚔️ War Tracking (FWA)",
-      lines: [
-        "`/war_track_setup` — Configure clan, rep channel/role, mail channel/ping *(admin)*",
-        "`/setup_war_log_channel <clan> <channel>` — Reminders, war-started & results *(admin)*",
-        "`/setup_war_reminder add <clan> <minutes> <anchor>` — Schedule a reminder *(admin)*",
-        "`/setup_war_reminder list|remove` — Manage reminders *(admin)*",
-        "`/war_announcement <clan> <win|lose> <template>` — Customize mail-room text *(admin)*",
-        "`/th_emoji set|list` — Map custom Town Hall emojis *(admin)*",
-        "`/war_track_list` — List war-tracked clans in this server *(admin)*",
-        "`/war_track_remove <clan>` — Stop war tracking for a clan *(admin)*",
-        "`/war_resend_result <clan>` — Re-evaluate & repost latest war result *(admin)*",
-        "`/war_last_result <clan> [mode]` — Show last ended war's violations (ephemeral) or full repost *(admin)*",
-      ],
-    },
-    {
-      title: "🔗 Linking & Profiles",
-      lines: [
-        "`/link player <tag> [user]` — Link a player tag to a Discord user",
-        "`/link clan <tag> [user]` — Link a clan tag to a Discord user",
-        "`/unlink player|clan <tag> [user]` — Remove a link",
-        "`/profile user [user]` — Show linked players for a user",
-        "`/profile tag <tag>` — Find the Discord user linked to a tag",
-        "`/profile clan [user]` — Show linked clans for a user",
-      ],
-    },
-    {
-      title: "🚫 Lists",
-      lines: [
-        "`/blacklist add|remove|list` — Manage blacklist *(add/remove: admin)*",
-        "`/whitelist add|remove|list` — Manage whitelist *(add/remove: admin)*",
-      ],
-    },
-    {
-      title: "🔐 Permissions & Maintenance",
-      lines: [
-        "`/perm grant <command> <role>` — Allow a role to use a command *(admin)*",
-        "`/perm revoke <command> <role>` — Revoke a role *(admin)*",
-        "`/perm list` — Show per-command role overrides",
-        "`/force_reset` — Wipe guild slash commands & re-sync globals *(admin)*",
-      ],
-    },
-  ];
+const HELP_SECTIONS: { title: string; lines: string[] }[] = [
+  {
+    title: "📊 Leaderboards & Stats",
+    lines: [
+      "`/top [clan] [count]` — Top donators this month",
+      "`/lowest [clan] [count]` — Lowest donators this month",
+      "`/player <tag>` — Player history & monthly totals",
+      "`/refresh [clan]` — Force immediate poll & leaderboard refresh *(admin)*",
+      "`/donation_reset [clan_tag]` — Reset this month's donation totals *(admin)*",
+    ],
+  },
+  {
+    title: "🔍 Clash of Clans Lookups",
+    lines: [
+      "`/player_info [tag] [user]` — TH, heroes, donations, war stars",
+      "`/clan_info [tag] [user]` — Level, league, members, war record",
+      "`/clan_members [tag] [user]` — Members sorted by donations",
+      "`/compo [tag] [user]` — Town Hall composition breakdown",
+      "`/current_war [tag] [user]` — Live current-war status",
+      "`/war_log [tag] [user]` — Last 10 regular wars",
+      "`/cwl [tag] [user]` — Current CWL status / round",
+      "`/cwl_roster [tag] [user]` — Full CWL roster",
+      "`/cwl_board [tag] [user]` — CWL leaderboard image",
+      "`/capital_raids [tag] [user]` — Latest Clan Capital raid weekend",
+      "`/player_activity [tag] [user]` — Today / 7d / 30d / month activity + last-seen + stays",
+      "`/player_joins [tag] [user]` — Player's join/leave history & total stay per clan",
+      "_Tip: type a clan tag to autocomplete from this server's Family clans._",
+    ],
+  },
+  {
+    title: "🛡️ Clan Setup",
+    lines: [
+      "`/clan add <tag> <channel>` — Track a clan & bind leaderboard channel *(admin)*",
+      "`/clan remove <tag>` — Stop tracking a clan *(admin)*",
+      "`/clan list` — List tracked clans in this server",
+      "`/global setchannel <channel>` — Bind global alliance leaderboard *(admin)*",
+    ],
+  },
+  {
+    title: "🏛️ Family Dashboard",
+    lines: [
+      "`/family_category add|remove|rename|list` — Manage categories *(admin)*",
+      "`/family_clan add|remove|move|list` — Manage clans in categories *(admin)*",
+      "`/family_clan_dashboard [channel]` — Post / re-bind the dashboard message *(admin)*",
+      "`/family_customize ...` — Title, color, footer, line format, images *(admin)*",
+      "`/embed_editor` — Open the web-based embed builder *(admin)*",
+    ],
+  },
+  {
+    title: "⚔️ War Tracking (FWA)",
+    lines: [
+      "`/war_track_setup` — Configure clan, rep channel/role, mail channel/ping *(admin)*",
+      "`/setup_war_log_channel <clan> <channel>` — Reminders, war-started & results *(admin)*",
+      "`/setup_war_reminder add <clan> <minutes> <anchor>` — Schedule a reminder *(admin)*",
+      "`/setup_war_reminder list|remove` — Manage reminders *(admin)*",
+      "`/war_announcement <clan> <win|lose> <template>` — Customize mail-room text *(admin)*",
+      "`/th_emoji set|list` — Map custom Town Hall emojis *(admin)*",
+      "`/war_track_list` — List war-tracked clans in this server *(admin)*",
+      "`/war_track_remove <clan>` — Stop war tracking for a clan *(admin)*",
+      "`/war_resend_result <clan>` — Re-evaluate & repost latest war result *(admin)*",
+      "`/war_last_result <clan> [mode]` — Show last ended war's violations (ephemeral) or full repost *(admin)*",
+    ],
+  },
+  {
+    title: "🔗 Linking & Profiles",
+    lines: [
+      "`/link player <tag> [user]` — Link a player tag to a Discord user",
+      "`/link clan <tag> [user]` — Link a clan tag to a Discord user",
+      "`/unlink player|clan <tag> [user]` — Remove a link",
+      "`/profile user [user]` — Show linked players for a user",
+      "`/profile tag <tag>` — Find the Discord user linked to a tag",
+      "`/profile clan [user]` — Show linked clans for a user",
+    ],
+  },
+  {
+    title: "🚫 Lists",
+    lines: [
+      "`/blacklist add|remove|list` — Manage blacklist *(add/remove: admin)*",
+      "`/whitelist add|remove|list` — Manage whitelist *(add/remove: admin)*",
+    ],
+  },
+  {
+    title: "🔐 Permissions & Maintenance",
+    lines: [
+      "`/perm grant <command> <role>` — Allow a role to use a command *(admin)*",
+      "`/perm revoke <command> <role>` — Revoke a role *(admin)*",
+      "`/perm list` — Show per-command role overrides",
+      "`/force_reset` — Wipe guild slash commands & re-sync globals *(admin)*",
+    ],
+  },
+];
 
+function buildHelpPayload(page: number) {
+  const total = HELP_SECTIONS.length;
+  const safe = Math.min(Math.max(0, page), total - 1);
+  const s = HELP_SECTIONS[safe];
   const embed = {
-    title: "🤖 Bot Commands",
-    description: "Here's everything I can do. Commands marked *(admin)* require server-admin or a granted role.",
+    title: `🤖 Bot Commands — ${s.title}`,
+    description:
+      "Commands marked *(admin)* require server-admin or a granted role.\n\n" +
+      s.lines.join("\n"),
     color: COLOR_BLURPLE,
-    fields: sections.map((s) => ({ name: s.title, value: s.lines.join("\n"), inline: false })),
-    footer: { text: "Tip: type / in chat to see all commands with autocomplete." },
+    footer: { text: `Page ${safe + 1}/${total} · Tip: type / in chat to see all commands with autocomplete.` },
   };
-  return replyEmbed(embed, true);
+  const components = [{
+    type: 1,
+    components: [
+      { type: 2, style: 2, label: "⏮", custom_id: `help:first`, disabled: safe <= 0 },
+      { type: 2, style: 2, label: "◀", custom_id: `help:prev:${safe}`, disabled: safe <= 0 },
+      { type: 2, style: 1, label: `${safe + 1}/${total}`, custom_id: `help:noop`, disabled: true },
+      { type: 2, style: 2, label: "▶", custom_id: `help:next:${safe}`, disabled: safe >= total - 1 },
+      { type: 2, style: 2, label: "⏭", custom_id: `help:last`, disabled: safe >= total - 1 },
+    ],
+  }];
+  return { embeds: [embed], components, allowed_mentions: { parse: [] } };
+}
+
+function handleHelp(_interaction: any): Response {
+  const payload = buildHelpPayload(0);
+  return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data: payload }), {
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // War decision select menu handler (custom_id: war:decide:<war_id>)
@@ -1385,6 +1406,18 @@ Deno.serve(async (req) => {
         else if (action === "next") page = (parseInt(arg ?? "0", 10) || 0) + 1;
 
         const payload = isClan ? await buildClanEmbed(guildId, clanTag, page) : await buildGlobalEmbed(guildId, page);
+        return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (cid.startsWith("help:") && !cid.endsWith(":noop")) {
+        const parts = cid.split(":");
+        const action = parts[1];
+        const arg = parts[2];
+        let page = 0;
+        if (action === "first") page = 0;
+        else if (action === "last") page = HELP_SECTIONS.length - 1;
+        else if (action === "prev") page = Math.max(0, (parseInt(arg ?? "0", 10) || 0) - 1);
+        else if (action === "next") page = (parseInt(arg ?? "0", 10) || 0) + 1;
+        const payload = buildHelpPayload(page);
         return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
       }
       if (cid.startsWith("war:decide:")) {
