@@ -385,4 +385,20 @@ export const COMMANDS: any[] = [
       { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
     ],
   },
+  {
+    name: "player_activity",
+    description: "Show a player's recent activity (today / 7d / 30d / month) with last-seen, wars & donations",
+    options: [
+      { type: STRING, name: "tag",  description: "Player tag — type to search known players", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked player tag)" },
+    ],
+  },
+  {
+    name: "player_joins",
+    description: "Show a player's join/leave history across Family clans (last 180 days)",
+    options: [
+      { type: STRING, name: "tag",  description: "Player tag — type to search known players", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked player tag)" },
+    ],
+  },
 ];

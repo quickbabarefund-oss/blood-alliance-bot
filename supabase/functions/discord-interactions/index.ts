@@ -16,6 +16,7 @@ import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
   buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
 } from "../_shared/coc_commands.ts";
+import { buildPlayerActivity, buildPlayerJoins } from "../_shared/player_activity.ts";
 
 const PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") ?? "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -63,6 +64,7 @@ const COC_AUTOCOMPLETE_CMDS = new Set([
   "clan_info","current_war","war_log","clan_members",
   "cwl","cwl_roster","cwl_board","capital_raids","compo",
 ]);
+const PLAYER_AUTOCOMPLETE_CMDS = new Set(["player_activity","player_joins"]);
 
 const COLOR_GREEN = 0x57F287;
 const COLOR_RED = 0xED4245;
@@ -811,6 +813,8 @@ function handleHelp(_interaction: any): Response {
         "`/cwl_roster [tag] [user]` — Full CWL roster",
         "`/cwl_board [tag] [user]` — CWL leaderboard image",
         "`/capital_raids [tag] [user]` — Latest Clan Capital raid weekend",
+        "`/player_activity [tag] [user]` — Today / 7d / 30d / month activity + last-seen + stays",
+        "`/player_joins [tag] [user]` — Player's join/leave history & total stay per clan",
         "_Tip: type a clan tag to autocomplete from this server's Family clans._",
       ],
     },
@@ -1178,6 +1182,8 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   cwl_board: buildCwlBoard,
   capital_raids: buildCapitalRaids,
   compo: buildCompo,
+  player_activity: buildPlayerActivity,
+  player_joins: buildPlayerJoins,
 };
 
 async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
@@ -1294,17 +1300,50 @@ Deno.serve(async (req) => {
     ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e));
   }
 
-  // Autocomplete: search Family clans for /clan_info, /compo, etc.
+  // Autocomplete: Family clans for /clan_info etc., or players table for /player_activity etc.
   if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE) {
     try {
       const cmdName = interaction.data?.name ?? "";
       const focused = (interaction.data?.options ?? []).find((o: any) => o.focused);
-      if (!COC_AUTOCOMPLETE_CMDS.has(cmdName) || !focused || focused.name !== "tag") {
+      if (!focused || focused.name !== "tag") {
         return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
       }
       const q = String(focused.value ?? "").trim().toLowerCase().replace(/^#/, "");
       const guildId = interaction.guild_id ?? "";
       const sb = adminClient();
+
+      if (PLAYER_AUTOCOMPLETE_CMDS.has(cmdName)) {
+        // Prefer players in this guild's Family clans, then global match by name/tag.
+        const { data: fam } = await sb.from("family_clans").select("clan_tag").eq("guild_id", guildId);
+        const famClanTags = (fam ?? []).map((r: any) => r.clan_tag);
+        let players: any[] = [];
+        if (q) {
+          const { data } = await sb.from("players")
+            .select("tag,name,current_clan_tag")
+            .or(`name.ilike.%${q.replace(/[%_]/g, "")}%,tag.ilike.%${q.toUpperCase()}%`)
+            .limit(50);
+          players = (data ?? []) as any[];
+        } else if (famClanTags.length) {
+          const { data } = await sb.from("players")
+            .select("tag,name,current_clan_tag")
+            .in("current_clan_tag", famClanTags)
+            .order("name")
+            .limit(25);
+          players = (data ?? []) as any[];
+        }
+        // Sort: family-clan members first
+        const famSet = new Set(famClanTags);
+        players.sort((a, b) => Number(famSet.has(b.current_clan_tag)) - Number(famSet.has(a.current_clan_tag)));
+        const choices = players.slice(0, 25).map((p) => ({
+          name: `${p.name || p.tag} (${p.tag})`.slice(0, 100),
+          value: p.tag,
+        }));
+        return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices } }), { headers: { "Content-Type": "application/json" } });
+      }
+
+      if (!COC_AUTOCOMPLETE_CMDS.has(cmdName)) {
+        return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
+      }
       const { data: rows } = await sb.from("family_clans")
         .select("clan_tag,clan_name,category_id,position")
         .eq("guild_id", guildId)
@@ -1447,6 +1486,8 @@ Deno.serve(async (req) => {
         case "cwl_board": return await handleCocCmd(interaction, buildCwlBoard);
         case "capital_raids": return await handleCocCmd(interaction, buildCapitalRaids);
         case "compo": return await handleCocCmd(interaction, buildCompo);
+        case "player_activity": return await handleCocCmd(interaction, buildPlayerActivity);
+        case "player_joins": return await handleCocCmd(interaction, buildPlayerJoins);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {

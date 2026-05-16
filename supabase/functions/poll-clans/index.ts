@@ -25,11 +25,45 @@ async function pollOne(clanTag: string) {
       last_polled_at: nowIso,
     }).eq("tag", clanTag);
 
+    // ---- Roster diff: detect joins/leaves vs previously-seen membership ----
+    const currentTags = new Set(members.map((m: any) => normalizeTag(m.tag)));
+    const { data: prevMembers } = await sb
+      .from("players")
+      .select("tag,name")
+      .eq("current_clan_tag", clanTag);
+    const prevTags = new Set((prevMembers ?? []).map((p: any) => p.tag));
+
+    // Leaves: in prevTags, not in currentTags
+    for (const p of (prevMembers ?? []) as Array<{ tag: string; name: string }>) {
+      if (!currentTags.has(p.tag)) {
+        await sb.from("clan_member_events").insert({
+          clan_tag: clanTag, player_tag: p.tag, player_name: p.name, event: "leave", occurred_at: nowIso,
+        });
+        await sb.from("player_activity_events").insert({
+          player_tag: p.tag, clan_tag: clanTag, kind: "leave", occurred_at: nowIso,
+        });
+        // Clear current_clan_tag if it still points here
+        await sb.from("players").update({ current_clan_tag: null }).eq("tag", p.tag).eq("current_clan_tag", clanTag);
+      }
+    }
+
     // For each member: upsert player, snapshot, compute delta vs last snapshot, update aggregate
     for (const m of members) {
       const ptag = normalizeTag(m.tag);
       const donated = m.donations ?? 0;
       const recv = m.donationsReceived ?? 0;
+      const atkWins = (m as any).attackWins ?? 0;
+      const defWins = (m as any).defenseWins ?? 0;
+
+      // Join detection
+      if (!prevTags.has(ptag)) {
+        await sb.from("clan_member_events").insert({
+          clan_tag: clanTag, player_tag: ptag, player_name: m.name ?? "", event: "join", occurred_at: nowIso,
+        });
+        await sb.from("player_activity_events").insert({
+          player_tag: ptag, clan_tag: clanTag, kind: "join", occurred_at: nowIso,
+        });
+      }
 
       // Upsert player
       await sb.from("players").upsert({
@@ -44,7 +78,7 @@ async function pollOne(clanTag: string) {
       // Last snapshot for this player in this clan
       const { data: last } = await sb
         .from("donation_snapshots")
-        .select("donations,donations_received,captured_at")
+        .select("donations,donations_received,attack_wins,defense_wins,captured_at")
         .eq("player_tag", ptag)
         .eq("clan_tag", clanTag)
         .order("captured_at", { ascending: false })
@@ -54,13 +88,21 @@ async function pollOne(clanTag: string) {
       // Delta logic: if current >= last, delta = current - last; else (in-game weekly reset) delta = current
       let dDon = donated;
       let dRecv = recv;
+      let dAtk = 0;
+      let dDef = 0;
       if (last) {
-        dDon = donated >= last.donations ? donated - last.donations : donated;
-        dRecv = recv >= last.donations_received ? recv - last.donations_received : recv;
+        dDon  = donated >= last.donations ? donated - last.donations : donated;
+        dRecv = recv    >= last.donations_received ? recv - last.donations_received : recv;
+        const prevAtk = (last as any).attack_wins  ?? 0;
+        const prevDef = (last as any).defense_wins ?? 0;
+        dAtk = atkWins >= prevAtk ? atkWins - prevAtk : atkWins;
+        dDef = defWins >= prevDef ? defWins - prevDef : defWins;
       } else {
         // First time we see this player — don't credit accumulated game value to this month
         dDon = 0;
         dRecv = 0;
+        dAtk = 0;
+        dDef = 0;
       }
 
       // Insert snapshot
@@ -69,8 +111,18 @@ async function pollOne(clanTag: string) {
         clan_tag: clanTag,
         donations: donated,
         donations_received: recv,
+        attack_wins: atkWins,
+        defense_wins: defWins,
         captured_at: nowIso,
       });
+
+      // Activity events from deltas
+      const evRows: any[] = [];
+      if (dDon  > 0) evRows.push({ player_tag: ptag, clan_tag: clanTag, kind: "donation", occurred_at: nowIso });
+      if (dRecv > 0) evRows.push({ player_tag: ptag, clan_tag: clanTag, kind: "receive",  occurred_at: nowIso });
+      if (dAtk  > 0) evRows.push({ player_tag: ptag, clan_tag: clanTag, kind: "attack",   occurred_at: nowIso });
+      if (dDef  > 0) evRows.push({ player_tag: ptag, clan_tag: clanTag, kind: "defense",  occurred_at: nowIso });
+      if (evRows.length) await sb.from("player_activity_events").insert(evRows);
 
       // Update monthly aggregate (additive)
       if (dDon > 0 || dRecv > 0) {
