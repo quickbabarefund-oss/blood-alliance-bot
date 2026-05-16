@@ -328,7 +328,7 @@ export function evaluateRules(opts: {
           breaks.push({
             player_tag: m.tag, player_name: m.name,
             rule: "early_cleanup",
-            detail: `2nd attack #${a.order} done before last-8h cleanup window (got ${a.stars}⭐)`,
+            detail: `2nd attack done before last-8h cleanup window (got ${a.stars}⭐)`,
           });
         }
         // Low-star: 1st handled by mirror_first; 2nd needs ≥2⭐ unless in cleanup window (then 1⭐ ok).
@@ -337,7 +337,7 @@ export function evaluateRules(opts: {
             breaks.push({
               player_tag: m.tag, player_name: m.name,
               rule: "low_stars",
-              detail: `2nd attack #${a.order} got ${a.stars}⭐ (need 2⭐${inCleanup ? "" : ", or 1⭐ inside last-8h cleanup"})`,
+              detail: `2nd attack got ${a.stars}⭐ (need 2⭐${inCleanup ? "" : ", or 1⭐ inside last-8h cleanup"})`,
             });
           }
         }
@@ -347,7 +347,7 @@ export function evaluateRules(opts: {
           breaks.push({
             player_tag: m.tag, player_name: m.name,
             rule: "low_stars",
-            detail: `Attack #${a.order} got 0⭐ (need 1⭐)`,
+            detail: `${i === 0 ? "1st" : "2nd"} attack got 0⭐ (need 1⭐)`,
           });
         }
       }
