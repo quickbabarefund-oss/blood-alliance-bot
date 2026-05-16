@@ -268,7 +268,7 @@ export async function buildPlayerActivity(
   const since30d = isoNDaysAgo(30);
   const sinceMo  = istMonthStartUtcIso();
 
-  const [donToday, don7d, don30d, donMo, warToday, war7d, war30d, warMo, act, moves, stays] = await Promise.all([
+  const [donToday, don7d, don30d, donMo, warToday, war7d, war30d, warMo, act, moves, stays, actToday, act7d, act30d, actMo] = await Promise.all([
     aggregateDonations(tag, sinceToday),
     aggregateDonations(tag, since7d),
     aggregateDonations(tag, since30d),
@@ -280,7 +280,15 @@ export async function buildPlayerActivity(
     activityToday(tag),
     recentMoves(tag),
     stayDaysByClan(tag),
+    computeActiveTime(tag, sinceToday),
+    computeActiveTime(tag, since7d),
+    computeActiveTime(tag, since30d),
+    computeActiveTime(tag, sinceMo),
   ]);
+  const monthDays = daysElapsedInIstMonth();
+  const avg7  = act7d.totalMs  / 7;
+  const avg30 = act30d.totalMs / 30;
+  const avgMo = actMo.totalMs  / Math.max(1, monthDays);
 
   // Clan name lookup for current + moves + stays
   const tagsForNames = new Set<string>();
