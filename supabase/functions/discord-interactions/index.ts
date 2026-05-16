@@ -535,7 +535,13 @@ async function handleWarResendResult(interaction: any) {
   const decision = (war.decision ?? result) as "win" | "lose";
   const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
 
-  const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers });
+  const { data: atkRows } = await sb.from("war_attacks")
+    .select("attacker_tag,attack_order,recorded_at").eq("war_id", war.id);
+  const attackTimes: Record<string, string> = {};
+  for (const r of (atkRows ?? []) as any[]) {
+    attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
+  }
+  const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers, attackTimes });
   await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
   if (breaks.length) {
     await sb.from("war_rule_breaks").insert(breaks.map((b) => ({
@@ -557,6 +563,75 @@ async function handleWarResendResult(interaction: any) {
     } catch (e) {
       console.error("war_resend_result failed", e);
       await followUp(appId, token, `❌ Resend failed: ${e instanceof Error ? e.message : String(e)}`, true);
+    }
+  })();
+  return deferred(true);
+}
+
+// /war_last_result clan_tag:<tag> mode:<full|violations>
+// full → reposts page1+page2+txt to the configured log channel (same as war_resend_result)
+// violations → ephemeral list of rule violations (no public message)
+async function handleWarLastResult(interaction: any) {
+  const denied = await gate(interaction, "war_last_result"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const clanTag = normalizeTag(getOpt(interaction.data.options, "clan_tag"));
+  const mode = (getOpt(interaction.data.options, "mode") ?? "violations") as string;
+  const appId = interaction.application_id;
+  const token = interaction.token;
+
+  (async () => {
+    try {
+      const sb = adminClient();
+      const { data: war } = await sb.from("wars").select("*")
+        .eq("guild_id", guildId).eq("clan_tag", clanTag)
+        .eq("result_posted", true)
+        .order("end_time", { ascending: false }).limit(1).maybeSingle();
+      if (!war) { await followUp(appId, token, `⚠️ No ended war found for \`${clanTag}\`.`, true); return; }
+
+      // Fresh roster (best effort) — fall back to raw_roster
+      let cw: CurrentWar | null = null;
+      try { cw = await postCoc<CurrentWar>({ action: "current_war", tag: clanTag }); } catch (_) {}
+      const ourMembers = (cw?.clan?.members ?? (war.raw_roster as any)?.clan ?? []) as any[];
+      const oppMembers = (cw?.opponent?.members ?? (war.raw_roster as any)?.opponent ?? []) as any[];
+
+      const endTime = parseCocTime(war.end_time) ?? new Date(war.end_time);
+      const decision = (war.decision ?? war.result ?? "win") as "win" | "lose";
+
+      const { data: atkRows } = await sb.from("war_attacks")
+        .select("attacker_tag,attack_order,recorded_at").eq("war_id", war.id);
+      const attackTimes: Record<string, string> = {};
+      for (const r of (atkRows ?? []) as any[]) attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
+
+      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers, attackTimes });
+
+      if (mode === "full") {
+        const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
+          .eq("guild_id", guildId).eq("clan_tag", clanTag).maybeSingle();
+        if (!cfg?.log_channel_id) { await followUp(appId, token, `⚠️ No log channel configured. Use \`/setup_war_log_channel\`.`, true); return; }
+        const { embeds, txt } = await buildResultEmbeds({ warRow: war, breaks, ourMembers });
+        const startIso = (war.start_time ?? new Date().toISOString()).slice(0, 10);
+        const filename = `war-${war.clan_tag.replace("#","")}-vs-${war.opponent_tag.replace("#","")}-${startIso}-LAST.txt`;
+        await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds });
+        await followUp(appId, token, `✅ Posted last result for \`${clanTag}\` to <#${cfg.log_channel_id}> (${breaks.length} violations).`, true);
+      } else {
+        // violations-only ephemeral
+        if (!breaks.length) {
+          await followUp(appId, token, `✅ Last war for \`${clanTag}\` had **no rule violations**.`, true);
+          return;
+        }
+        const grouped: Record<string, typeof breaks> = {};
+        for (const b of breaks) (grouped[b.player_tag] ??= []).push(b);
+        const lines = Object.values(grouped).map((list) => {
+          const head = `**${list[0].player_name}** \`${list[0].player_tag}\``;
+          const sub = list.map((b) => `• \`${b.rule}\` — ${b.detail}`).join("\n");
+          return `${head}\n${sub}`;
+        });
+        const header = `**Last war violations — ${war.clan_name ?? war.clan_tag} vs ${war.opponent_name ?? war.opponent_tag}** (${breaks.length} total)\n\n`;
+        await followUp(appId, token, (header + lines.join("\n\n")).slice(0, 1990), true);
+      }
+    } catch (e) {
+      console.error("war_last_result failed", e);
+      await followUp(appId, token, `❌ Failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
   })();
   return deferred(true);
@@ -754,6 +829,7 @@ function handleHelp(_interaction: any): Response {
         "`/war_track_list` — List war-tracked clans in this server *(admin)*",
         "`/war_track_remove <clan>` — Stop war tracking for a clan *(admin)*",
         "`/war_resend_result <clan>` — Re-evaluate & repost latest war result *(admin)*",
+        "`/war_last_result <clan> [mode]` — Show last ended war's violations (ephemeral) or full repost *(admin)*",
       ],
     },
     {
@@ -1336,6 +1412,7 @@ Deno.serve(async (req) => {
         case "war_track_list": return await handleWarTrackList(interaction);
         case "war_track_remove": return await handleWarTrackRemove(interaction);
         case "war_resend_result": return await handleWarResendResult(interaction);
+        case "war_last_result": return await handleWarLastResult(interaction);
         case "force_reset": return await handleForceReset(interaction);
         case "donation_reset": return await handleDonationReset(interaction);
         case "family_category": return await handleFamilyCategory(interaction);

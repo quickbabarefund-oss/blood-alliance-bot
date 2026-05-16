@@ -155,7 +155,14 @@ export async function buildRepsPayload(opts: {
 }
 
 // Build a war-started or reminder message as plain content (so mentions actually ping users).
-// Returns { content, allowed_mentions } — no embed, since embed mentions don't trigger notifications.
+// Format:
+//   ⏰ **12h Remaining in War**
+//   **CLAN** vs **OPPONENT**
+//   ⚔️ 12/50   ⭐ 32/75
+//   🕒 <t:...:F> (<t:...:R>)
+//
+//   Remaining (38/50):
+//   (0/2) {TH} name | `#TAG` @mention
 export async function buildReminderPayload(opts: {
   reminderLabel: string; // "War Started" or "2h reminder"
   emoji: string;
@@ -169,6 +176,8 @@ export async function buildReminderPayload(opts: {
   const ours = opts.current.clan!;
   const opp = opts.current.opponent!;
   const members = ours.members ?? [];
+  const teamSize = opts.current.teamSize ?? members.length;
+  const maxAttacks = teamSize * 2;
 
   // Pull discord links for these tags
   const tags = members.map((m) => m.tag);
@@ -180,26 +189,55 @@ export async function buildReminderPayload(opts: {
     }
   }
 
+  // Stats
+  let usedAttacks = 0;
+  let starsEarned = 0;
+  for (const m of members) {
+    const atks = m.attacks ?? [];
+    usedAttacks += atks.length;
+    for (const a of atks) starsEarned += a.stars;
+  }
+  const remainingCount = members.filter((m) => (m.attacks?.length ?? 0) < 2).length;
+
   const mentionedUsers: string[] = [];
-  const lines = members
+  // Sort: TH desc, then map position asc
+  const sorted = members.slice().sort((a, b) => (b.townhallLevel - a.townhallLevel) || (a.mapPosition - b.mapPosition));
+  const lines = sorted
     .map((m) => {
       const used = m.attacks?.length ?? 0;
-      const left = 2 - used; // standard war = 2 attacks each
+      const left = 2 - used;
       if (left <= 0) return null;
       let mention = "";
       if (links[m.tag]) {
-        mention = `<@${links[m.tag]}>`;
+        mention = ` | <@${links[m.tag]}>`;
         mentionedUsers.push(links[m.tag]);
       }
-      return `⚔️ ${left}/2 | ${thEmoji(thMap, m.townhallLevel)} **${m.name}** | \`${m.tag}\` ${mention}`.trim();
+      return `(${used}/2) ${thEmoji(thMap, m.townhallLevel)} ${m.name} | \`${m.tag}\`${mention}`;
     })
-    .filter(Boolean)
-    .join("\n");
+    .filter(Boolean) as string[];
 
-  const header = `${opts.emoji} **${opts.reminderLabel}** — ${ours.name} \`${ours.tag}\` **VS** ${opp.name} \`${opp.tag}\``;
-  const body = lines || "✅ All attacks used!";
-  // Discord caps content at 2000 chars
-  let content = `${header}\n${body}`.slice(0, 1990);
+  // Header: "12h Remaining in War" (or label override for war_started)
+  const endTs = parseCocTime(opts.current.endTime ?? "")?.getTime();
+  const nowMs = Date.now();
+  let headerLabel = opts.reminderLabel;
+  if (opts.slot !== "war_started" && endTs) {
+    const minsLeft = Math.max(0, Math.round((endTs - nowMs) / 60000));
+    const hrs = Math.floor(minsLeft / 60);
+    const mins = minsLeft % 60;
+    headerLabel = hrs >= 1
+      ? `${hrs}h${mins ? ` ${mins}m` : ""} Remaining in War`
+      : `${mins}m Remaining in War`;
+  }
+
+  const headLine1 = `${opts.emoji} **${headerLabel}**`;
+  const headLine2 = `**${ours.name}** vs **${opp.name}**`;
+  const statsLine = `⚔️ ${usedAttacks}/${maxAttacks}   ⭐ ${starsEarned}/${teamSize * 3}`;
+  const timeLine = endTs ? `🕒 <t:${Math.floor(endTs / 1000)}:F> (<t:${Math.floor(endTs / 1000)}:R>)` : "";
+
+  // Body (may need to be chunked to fit 2000 chars; we keep it simple and slice)
+  const remainingHeader = `Remaining (${remainingCount}/${teamSize}):`;
+  const body = lines.length ? `${remainingHeader}\n${lines.join("\n")}` : "✅ All attacks used!";
+  let content = [headLine1, headLine2, statsLine, timeLine, "", body].filter(Boolean).join("\n").slice(0, 1990);
 
   // Dedupe user IDs and cap to 100 (Discord limit)
   const uniqueUsers = Array.from(new Set(mentionedUsers)).slice(0, 100);
@@ -233,11 +271,14 @@ export function evaluateRules(opts: {
   endTime: Date;
   ourMembers: WarMember[];
   oppMembers?: WarMember[];
+  // Map of `${attackerTag}:${order}` -> first-observed timestamp (war_attacks.recorded_at).
+  // Used to decide whether an attack happened inside the last-8h cleanup window.
+  attackTimes?: Record<string, Date | string>;
 }): RuleBreak[] {
   const breaks: RuleBreak[] = [];
   const last8Start = new Date(opts.endTime.getTime() - 8 * 3600_000);
+  const times = opts.attackTimes ?? {};
 
-  // Defender position lookup — defenders live in OPPONENT roster, not ours.
   const posMap: Record<string, number> = {};
   for (const m of (opts.oppMembers ?? [])) posMap[m.tag] = m.mapPosition;
 
@@ -245,7 +286,6 @@ export function evaluateRules(opts: {
     const attacks = (m.attacks ?? []).slice().sort((a, b) => a.order - b.order);
     const myPos = m.mapPosition;
 
-    // missed attacks
     if (attacks.length < 2) {
       breaks.push({
         player_tag: m.tag, player_name: m.name,
@@ -254,54 +294,66 @@ export function evaluateRules(opts: {
       });
     }
 
-    // 1st attack mirror rule
+    // 1st attack mirror rule — clearer wording
     if (attacks.length >= 1) {
       const a = attacks[0];
       const defPos = posMap[a.defenderTag] ?? -999;
       const isMirror = defPos === myPos;
-      if (opts.decision === "win") {
-        if (!isMirror || a.stars < 3) {
-          breaks.push({
-            player_tag: m.tag, player_name: m.name,
-            rule: "mirror_first",
-            detail: `1st attack ${isMirror ? "mirror" : `pos ${defPos} (own ${myPos})`} got ${a.stars}⭐ — expected mirror 3⭐`,
-          });
-        }
-      } else {
-        if (!isMirror || a.stars < 2) {
-          breaks.push({
-            player_tag: m.tag, player_name: m.name,
-            rule: "mirror_first",
-            detail: `1st attack ${isMirror ? "mirror" : `pos ${defPos} (own ${myPos})`} got ${a.stars}⭐ — expected mirror 2⭐`,
-          });
-        }
+      const minStars = opts.decision === "win" ? 3 : 2;
+      if (!isMirror) {
+        breaks.push({
+          player_tag: m.tag, player_name: m.name,
+          rule: "mirror_first",
+          detail: `1st attack should mirror own #${myPos} for ${minStars}⭐ — hit #${defPos} for ${a.stars}⭐`,
+        });
+      } else if (a.stars < minStars) {
+        breaks.push({
+          player_tag: m.tag, player_name: m.name,
+          rule: "mirror_first",
+          detail: `1st attack mirrored own #${myPos} but only got ${a.stars}⭐ (need ${minStars}⭐)`,
+        });
       }
     }
 
-    // Window rules per attack
-    // Note: CoC API doesn't timestamp individual attacks; use attack order as proxy isn't perfect.
-    // We approximate: if war has reached last8 window AND this attack hasn't been logged yet at recording time,
-    // we treat newly-observed attacks as "current window" (handled by war-poll when inserting).
-    // Here, evaluate retrospectively by ALL attacks based on whether attack passes minimum stars.
+    // Per-attack rules
     for (let i = 0; i < attacks.length; i++) {
       const a = attacks[i];
-      const minWin = i === 0 ? 3 : 2; // win war: any 2nd attack >= 2
-      const minLose = i === 0 ? 2 : 1;
+      const tsRaw = times[`${m.tag}:${a.order}`];
+      const ts = tsRaw ? (tsRaw instanceof Date ? tsRaw : new Date(tsRaw)) : null;
+      const inCleanup = ts ? ts >= last8Start : false;
+
       if (opts.decision === "win") {
-        if (a.stars < 2) {
-          breaks.push({ player_tag: m.tag, player_name: m.name, rule: "low_stars",
-            detail: `Attack #${a.order} got ${a.stars}⭐ (min ${minWin === 3 && i === 0 ? "3⭐ mirror" : "2⭐"})` });
+        // 2nd attack must be inside last-8h cleanup window. Early 2nd attacks (esp. 3⭐ steals) = violation.
+        if (i >= 1 && ts && !inCleanup) {
+          breaks.push({
+            player_tag: m.tag, player_name: m.name,
+            rule: "early_cleanup",
+            detail: `2nd attack #${a.order} done before last-8h cleanup window (got ${a.stars}⭐)`,
+          });
+        }
+        // Low-star: 1st handled by mirror_first; 2nd needs ≥2⭐ unless in cleanup window (then 1⭐ ok).
+        if (i >= 1 && a.stars < 2) {
+          if (!(inCleanup && a.stars >= 1)) {
+            breaks.push({
+              player_tag: m.tag, player_name: m.name,
+              rule: "low_stars",
+              detail: `2nd attack #${a.order} got ${a.stars}⭐ (need 2⭐${inCleanup ? "" : ", or 1⭐ inside last-8h cleanup"})`,
+            });
+          }
         }
       } else {
+        // Lose war: any attack must get ≥1⭐
         if (a.stars < 1) {
-          breaks.push({ player_tag: m.tag, player_name: m.name, rule: "low_stars",
-            detail: `Attack #${a.order} got 0⭐ (min ${minLose}⭐)` });
+          breaks.push({
+            player_tag: m.tag, player_name: m.name,
+            rule: "low_stars",
+            detail: `Attack #${a.order} got 0⭐ (need 1⭐)`,
+          });
         }
       }
     }
   }
 
-  // Dedupe (player + rule + detail)
   const seen = new Set<string>();
   return breaks.filter((b) => {
     const k = `${b.player_tag}|${b.rule}|${b.detail}`;
@@ -322,6 +374,15 @@ export async function buildResultEmbeds(opts: {
   const okEmoji = "<a:tick:1447242811949711441>";
   const noEmoji = "<a:cross:1477055818229878915>";
   const allOk = violators.size === 0;
+  const teamSize = w.team_size ?? opts.ourMembers.length;
+  const maxAttacks = teamSize * 2;
+  let usedAttacks = 0;
+  let missedCount = 0;
+  for (const m of opts.ourMembers) {
+    const used = m.attacks?.length ?? 0;
+    usedAttacks += used;
+    if (used < 2) missedCount += (2 - used);
+  }
 
   const page1: any = {
     title: `${w.clan_name ?? w.clan_tag} vs ${w.opponent_name ?? w.opponent_tag} — Final Result`,
@@ -333,6 +394,8 @@ export async function buildResultEmbeds(opts: {
       { name: "Decision", value: (w.decision ?? "—").toUpperCase(), inline: true },
       { name: "Stars", value: `${w.our_stars ?? 0} vs ${w.opp_stars ?? 0}`, inline: true },
       { name: "Destruction", value: `${(w.our_destruction ?? 0).toFixed?.(2) ?? w.our_destruction ?? 0}% vs ${(w.opp_destruction ?? 0).toFixed?.(2) ?? w.opp_destruction ?? 0}%`, inline: true },
+      { name: "Attacks Used", value: `${usedAttacks}/${maxAttacks}`, inline: true },
+      { name: "Missed Attacks", value: String(missedCount), inline: true },
       { name: "Rules followed 100%", value: allOk ? okEmoji : noEmoji, inline: true },
       { name: "Compliant Players", value: String(compliantCount), inline: true },
       { name: "Players Breaking Rules", value: String(violators.size), inline: true },
