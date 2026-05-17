@@ -224,6 +224,20 @@ export const COMMANDS: any[] = [
     name: "help", description: "Show all available bot commands and what they do",
   },
   {
+    name: "command_toggle",
+    description: "Enable/disable bot commands in this server (bot owner only)",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: SUB, name: "disable", description: "Disable a command in this server", options: [
+        { type: STRING, name: "command", description: "Command name (e.g. top)", required: true },
+      ]},
+      { type: SUB, name: "enable", description: "Re-enable a previously disabled command", options: [
+        { type: STRING, name: "command", description: "Command name", required: true },
+      ]},
+      { type: SUB, name: "list", description: "List disabled commands in this server" },
+    ],
+  },
+  {
     name: "force_reset",
     description: "Force-reset slash commands for this server (wipes guild copies & re-syncs globals)",
     default_member_permissions: ADMIN_ONLY,
