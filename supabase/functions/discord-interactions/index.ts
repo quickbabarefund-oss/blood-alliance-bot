@@ -905,6 +905,52 @@ function buildHelpPayload(page: number) {
   return { embeds: [embed], components, allowed_mentions: { parse: [] } };
 }
 
+const BOT_OWNER_ID = "1416822914950496366";
+const ALWAYS_ENABLED = new Set(["command_toggle", "help", "perm", "force_reset"]);
+
+async function isCommandDisabled(guildId: string, command: string): Promise<boolean> {
+  if (!guildId || ALWAYS_ENABLED.has(command)) return false;
+  const sb = adminClient();
+  const { data } = await sb.from("disabled_commands")
+    .select("command").eq("guild_id", guildId).eq("command", command).maybeSingle();
+  return !!data;
+}
+
+async function handleCommandToggle(interaction: any): Promise<Response> {
+  const userId = interaction.member?.user?.id ?? interaction.user?.id ?? "";
+  if (userId !== BOT_OWNER_ID) {
+    return reply("⛔ Only the bot owner can use this command.");
+  }
+  const guildId = interaction.guild_id;
+  if (!guildId) return reply("⛔ Must be run inside a server.");
+  const sb = adminClient();
+  const { sub, options } = getSubOptions(interaction.data.options);
+
+  if (sub === "list") {
+    const { data } = await sb.from("disabled_commands")
+      .select("command,disabled_at").eq("guild_id", guildId).order("command");
+    if (!data?.length) return reply("✅ No commands are disabled in this server.");
+    return reply("🚫 Disabled commands:\n" + data.map((r: any) => `• \`/${r.command}\``).join("\n"));
+  }
+
+  const cmd = String(options?.find((o: any) => o.name === "command")?.value ?? "").trim().toLowerCase().replace(/^\//, "");
+  if (!cmd) return reply("Provide a command name.");
+  if (ALWAYS_ENABLED.has(cmd)) return reply(`⛔ \`/${cmd}\` cannot be disabled.`);
+
+  if (sub === "disable") {
+    await sb.from("disabled_commands").upsert(
+      { guild_id: guildId, command: cmd, disabled_by: userId },
+      { onConflict: "guild_id,command" },
+    );
+    return reply(`🚫 Disabled \`/${cmd}\` in this server.`);
+  }
+  if (sub === "enable") {
+    await sb.from("disabled_commands").delete().eq("guild_id", guildId).eq("command", cmd);
+    return reply(`✅ Enabled \`/${cmd}\` in this server.`);
+  }
+  return reply("Unknown subcommand.");
+}
+
 function handleHelp(_interaction: any): Response {
   const payload = buildHelpPayload(0);
   return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data: payload }), {
