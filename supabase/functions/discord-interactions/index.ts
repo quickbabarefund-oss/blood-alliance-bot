@@ -929,26 +929,26 @@ async function handleCommandToggle(interaction: any): Promise<Response> {
   if (sub === "list") {
     const { data } = await sb.from("disabled_commands")
       .select("command,disabled_at").eq("guild_id", guildId).order("command");
-    if (!data?.length) return reply("✅ No commands are disabled in this server.");
-    return reply("🚫 Disabled commands:\n" + data.map((r: any) => `• \`/${r.command}\``).join("\n"));
+    if (!data?.length) return reply("✅ No commands are disabled in this server.", false);
+    return reply("🚫 Disabled commands:\n" + data.map((r: any) => `• \`/${r.command}\``).join("\n"), false);
   }
 
   const cmd = String(options?.find((o: any) => o.name === "command")?.value ?? "").trim().toLowerCase().replace(/^\//, "");
-  if (!cmd) return reply("Provide a command name.");
-  if (ALWAYS_ENABLED.has(cmd)) return reply(`⛔ \`/${cmd}\` cannot be disabled.`);
+  if (!cmd) return reply("Provide a command name.", false);
+  if (ALWAYS_ENABLED.has(cmd)) return reply(`⛔ \`/${cmd}\` cannot be disabled.`, false);
 
   if (sub === "disable") {
     await sb.from("disabled_commands").upsert(
       { guild_id: guildId, command: cmd, disabled_by: userId },
       { onConflict: "guild_id,command" },
     );
-    return reply(`🚫 Disabled \`/${cmd}\` in this server.`);
+    return reply(`🚫 Disabled \`/${cmd}\` in this server.`, false);
   }
   if (sub === "enable") {
     await sb.from("disabled_commands").delete().eq("guild_id", guildId).eq("command", cmd);
-    return reply(`✅ Enabled \`/${cmd}\` in this server.`);
+    return reply(`✅ Enabled \`/${cmd}\` in this server.`, false);
   }
-  return reply("Unknown subcommand.");
+  return reply("Unknown subcommand.", false);
 }
 
 function handleHelp(_interaction: any): Response {
