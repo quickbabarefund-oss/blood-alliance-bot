@@ -140,6 +140,27 @@ export type Database = {
         }
         Relationships: []
       }
+      disabled_commands: {
+        Row: {
+          command: string
+          disabled_at: string
+          disabled_by: string | null
+          guild_id: string
+        }
+        Insert: {
+          command: string
+          disabled_at?: string
+          disabled_by?: string | null
+          guild_id: string
+        }
+        Update: {
+          command?: string
+          disabled_at?: string
+          disabled_by?: string | null
+          guild_id?: string
+        }
+        Relationships: []
+      }
       discord_config: {
         Row: {
           global_channel_id: string | null
