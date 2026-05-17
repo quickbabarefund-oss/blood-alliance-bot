@@ -1525,7 +1525,11 @@ Deno.serve(async (req) => {
   if (interaction.type === APPLICATION_COMMAND) {
     const name = interaction.data.name;
     try {
+      if (await isCommandDisabled(interaction.guild_id ?? "", name)) {
+        return reply(`🚫 \`/${name}\` is disabled in this server.`);
+      }
       switch (name) {
+        case "command_toggle": return await handleCommandToggle(interaction);
         case "clan": return await handleClan(interaction);
         case "global": return await handleGlobal(interaction);
         case "top": return await handleTopOrLowest(interaction, false);
