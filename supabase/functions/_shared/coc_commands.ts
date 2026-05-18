@@ -6,7 +6,7 @@
 import { adminClient } from "./leaderboard.ts";
 import { normalizeTag, postCoc, fetchClan, fetchPlayer } from "./coc.ts";
 import { applyTemplate } from "./embed_templates.ts";
-import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink } from "./war.ts";
+import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink, compositionLine } from "./war.ts";
 
 const COLOR = 0x5865F2;
 const COLOR_GREEN = 0x57F287;
