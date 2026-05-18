@@ -295,23 +295,35 @@ export type Database = {
       }
       family_categories: {
         Row: {
+          button_label: string | null
+          button_style: number
           created_at: string
+          emoji: string | null
           guild_id: string
           id: number
+          line_format: string | null
           name: string
           position: number
         }
         Insert: {
+          button_label?: string | null
+          button_style?: number
           created_at?: string
+          emoji?: string | null
           guild_id: string
           id?: number
+          line_format?: string | null
           name: string
           position?: number
         }
         Update: {
+          button_label?: string | null
+          button_style?: number
           created_at?: string
+          emoji?: string | null
           guild_id?: string
           id?: number
+          line_format?: string | null
           name?: string
           position?: number
         }
@@ -402,6 +414,57 @@ export type Database = {
           spacing_lines?: number
           thumbnail_url?: string | null
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      family_info_messages: {
+        Row: {
+          button_style: number
+          color: number | null
+          created_at: string
+          description: string | null
+          emoji: string | null
+          guild_id: string
+          id: number
+          image_url: string | null
+          key: string
+          label: string
+          position: number
+          thumbnail_url: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          button_style?: number
+          color?: number | null
+          created_at?: string
+          description?: string | null
+          emoji?: string | null
+          guild_id: string
+          id?: number
+          image_url?: string | null
+          key: string
+          label: string
+          position?: number
+          thumbnail_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          button_style?: number
+          color?: number | null
+          created_at?: string
+          description?: string | null
+          emoji?: string | null
+          guild_id?: string
+          id?: number
+          image_url?: string | null
+          key?: string
+          label?: string
+          position?: number
+          thumbnail_url?: string | null
+          title?: string | null
           updated_at?: string
         }
         Relationships: []
