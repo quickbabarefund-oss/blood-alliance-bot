@@ -96,49 +96,68 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
     cfg = data as FamilyDashboardCfg | null;
   }
   const c = cfg ?? ({} as FamilyDashboardCfg);
-  const { categories, clans } = await loadFamily(guildId);
-  const fields: any[] = [];
+  const [{ categories, clans }, infos] = await Promise.all([
+    loadFamily(guildId),
+    loadFamilyInfo(guildId),
+  ]);
 
+  // Build button list: one per category, then info entries, then a Clan Statistics button.
+  const buttons: any[] = [];
+  for (const cat of categories) {
+    const label = (cat.button_label?.trim() || cat.name).slice(0, 80);
+    buttons.push({
+      type: 2,
+      style: cat.button_style ?? 2,
+      label,
+      emoji: parseEmoji(cat.emoji),
+      custom_id: `fam:cat:${cat.id}`,
+    });
+  }
+  for (const info of infos) {
+    buttons.push({
+      type: 2,
+      style: info.button_style ?? 2,
+      label: (info.label || info.key).slice(0, 80),
+      emoji: parseEmoji(info.emoji),
+      custom_id: `fam:info:${info.id}`,
+    });
+  }
+  // Reserve room for Clan Statistics if we have any clans tracked.
+  if (clans.length) {
+    if (buttons.length < 25) {
+      buttons.push({
+        type: 2, style: 2, label: "Clan Statistics",
+        emoji: parseEmoji("📊"),
+        custom_id: `fam:stats`,
+      });
+    }
+  }
+  const components = packButtonRows(buttons);
+
+  // Build the embed body. If admin hasn't set a description we keep the
+  // original "category lists in fields" layout so the message still looks
+  // helpful before they wire info / stats buttons up.
+  const fields: any[] = [];
   if (!categories.length) {
-    fields.push({ name: "No categories yet", value: "Use `/family_category add <name>` to create one, then `/family_clan add` to populate.", inline: false });
+    fields.push({ name: "No categories yet", value: "Use `/family_category add <name>` to create one (becomes a button), then `/family_clan add` to populate.", inline: false });
   }
 
-  const emoji = c.category_emoji || "🏰";
-  const lineTpl = c.clan_line_format || "`{i}.` **{name}** `{tag}`";
-  const spacing = Math.max(0, Math.min(2, c.spacing_lines ?? 1));
-  const template = await getTemplate(guildId, "family_dashboard");
-  const hasEffectiveDescription = Boolean(c.description || (template?.enabled && template.description));
-  const SEP = { name: "\u200b", value: "\u200b", inline: false };
-  const pushSep = () => { for (let k = 0; k < spacing; k++) fields.push({ ...SEP }); };
-
-  if (categories.length && hasEffectiveDescription) pushSep();
-
-  categories.forEach((cat, idx) => {
-    const cs = clans.filter((x) => x.category_id === cat.id);
-    const value = cs.length
-      ? cs.map((cl, i) => formatLine(lineTpl, {
-          i: i + 1, tag: cl.clan_tag, name: cl.clan_name || cl.clan_tag,
-        })).join("\n")
-      : "_No clans yet_";
-    fields.push({ name: `${emoji} ${cat.name} — ${cs.length}`, value, inline: false });
-    if (idx < categories.length - 1) pushSep();
-  });
-
-  const components: any[] = [];
-  for (const cat of categories.slice(0, 5)) {
-    const cs = clans.filter((x) => x.category_id === cat.id).slice(0, 25);
-    if (!cs.length) continue;
-    components.push({
-      type: 1,
-      components: [{
-        type: 3,
-        custom_id: `fam:view:${cat.id}`,
-        placeholder: `🔎 ${cat.name} — pick a clan to view details`,
-        options: cs.map((cl) => ({
-          label: (cl.clan_name ? `${cl.clan_name} (${cl.clan_tag})` : cl.clan_tag).slice(0, 100),
-          value: cl.clan_tag,
-        })),
-      }],
+  const embedConfigHasFields = Boolean(c.description);
+  if (categories.length && !embedConfigHasFields) {
+    const lineTpl = c.clan_line_format || "`{i}.` **{name}** `{tag}`";
+    const emoji = c.category_emoji || "🏰";
+    categories.forEach((cat) => {
+      const cs = clans.filter((x) => x.category_id === cat.id);
+      const value = cs.length
+        ? cs.map((cl, i) => formatLine(cat.line_format || lineTpl, {
+            i: i + 1, tag: cl.clan_tag, name: cl.clan_name || cl.clan_tag,
+          })).join("\n")
+        : "_No clans yet_";
+      fields.push({
+        name: `${cat.emoji || emoji} ${cat.name} — ${cs.length}`,
+        value: value.slice(0, 1024),
+        inline: false,
+      });
     });
   }
 
@@ -156,13 +175,142 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
   // Apply user-overridden template (from web UI builder), preserving fields
   const tplResult = await applyTemplate(guildId, "family_dashboard", embed, { keepFields: true });
   const finalEmbed = { ...tplResult.embed };
-  // Strip leading/trailing blank lines from title and description so saved
-  // edits are always visibly reflected on Discord (otherwise hidden \n\n
-  // prefixes make Discord render an unchanged-looking embed).
   if (typeof finalEmbed.title === "string") finalEmbed.title = finalEmbed.title.replace(/^[\s\u200b]+|[\s\u200b]+$/g, "");
   if (typeof finalEmbed.description === "string") finalEmbed.description = finalEmbed.description.replace(/^[\s\u200b]+|[\s\u200b]+$/g, "");
   const content = tplResult.content ? tplResult.content.replace(/^[\s\u200b]+|[\s\u200b]+$/g, "") : undefined;
   return { content: content || undefined, embeds: [finalEmbed], components, allowed_mentions: { parse: [] } };
+}
+
+// Build the "category click" response: embed listing clans in that category + a select menu.
+export async function buildCategoryListPayload(guildId: string, categoryId: number): Promise<any> {
+  const sb = adminClient();
+  const { data: cat } = await sb.from("family_categories")
+    .select("id,name,emoji,line_format").eq("guild_id", guildId).eq("id", categoryId).maybeSingle();
+  if (!cat) return { content: "Category not found.", flags: 64 };
+  const { data: cs } = await sb.from("family_clans")
+    .select("clan_tag,clan_name,position")
+    .eq("guild_id", guildId).eq("category_id", categoryId)
+    .order("position");
+  const clans = (cs ?? []) as Array<{ clan_tag: string; clan_name: string }>;
+
+  const lineTpl = (cat as any).line_format || "`{i}.` **{name}** `{tag}`";
+  const emoji = (cat as any).emoji || "🏰";
+  const body = clans.length
+    ? clans.map((cl, i) => formatLine(lineTpl, {
+        i: i + 1, tag: cl.clan_tag, name: cl.clan_name || cl.clan_tag,
+      })).join("\n")
+    : "_No clans yet_";
+
+  const embed = {
+    title: `${emoji} ${cat.name} Clans`,
+    description: `**${cat.name} Clans — ${clans.length}**\n${body}`,
+    color: DEFAULT_COLOR,
+  };
+  const components: any[] = [];
+  if (clans.length) {
+    components.push({
+      type: 1,
+      components: [{
+        type: 3,
+        custom_id: `fam:view:${cat.id}`,
+        placeholder: `Select a ${cat.name} Clan`,
+        options: clans.slice(0, 25).map((cl) => ({
+          label: (cl.clan_name || cl.clan_tag).slice(0, 100),
+          description: cl.clan_tag.slice(0, 100),
+          value: cl.clan_tag,
+        })),
+      }],
+    });
+  }
+  return { embeds: [embed], components, allowed_mentions: { parse: [] }, flags: 64 };
+}
+
+// Build the "info button click" payload
+export async function buildInfoPayload(guildId: string, infoId: number): Promise<any> {
+  const { data } = await adminClient()
+    .from("family_info_messages").select("*")
+    .eq("guild_id", guildId).eq("id", infoId).maybeSingle();
+  if (!data) return { content: "Info not found.", flags: 64 };
+  const info = data as FamilyInfoRow;
+  const embed: any = {
+    title: info.title || info.label,
+    description: (info.description ?? "").replace(/\\n/g, "\n") || undefined,
+    color: info.color ?? DEFAULT_COLOR,
+  };
+  if (info.image_url) embed.image = { url: info.image_url };
+  if (info.thumbnail_url) embed.thumbnail = { url: info.thumbnail_url };
+  return { embeds: [embed], flags: 64, allowed_mentions: { parse: [] } };
+}
+
+// Build the "Clan Statistics" payload — month-to-date donations + active/inactive activity.
+export async function buildFamilyStatsPayload(guildId: string): Promise<any> {
+  const sb = adminClient();
+  const [{ categories, clans }] = await Promise.all([loadFamily(guildId)]);
+  if (!clans.length) return { content: "No clans tracked yet.", flags: 64 };
+
+  // Month-to-date donations per clan (sum from monthly_aggregates for current IST month)
+  const istNow = new Date(Date.now() + (5 * 60 + 30) * 60_000);
+  const monthKey = `${istNow.getUTCFullYear()}-${String(istNow.getUTCMonth() + 1).padStart(2, "0")}`;
+  const clanTags = clans.map((c) => c.clan_tag);
+  const [{ data: agg }, { data: clanMeta }, { data: activity }] = await Promise.all([
+    sb.from("monthly_aggregates").select("clan_tag,donations")
+      .eq("month_key", monthKey).in("clan_tag", clanTags),
+    sb.from("clans").select("tag,name,member_count").in("tag", clanTags),
+    sb.from("player_activity_events")
+      .select("player_tag,clan_tag,occurred_at")
+      .in("clan_tag", clanTags)
+      .gte("occurred_at", new Date(Date.now() - 24 * 3600_000).toISOString()),
+  ]);
+
+  const donationByClan = new Map<string, number>();
+  for (const r of (agg ?? []) as any[]) {
+    donationByClan.set(r.clan_tag, (donationByClan.get(r.clan_tag) ?? 0) + (r.donations ?? 0));
+  }
+  const metaByTag = new Map<string, { name: string; member_count: number }>();
+  for (const r of (clanMeta ?? []) as any[]) {
+    metaByTag.set(r.tag, { name: r.name, member_count: r.member_count ?? 0 });
+  }
+  const activeByClan = new Map<string, Set<string>>();
+  for (const r of (activity ?? []) as any[]) {
+    if (!activeByClan.has(r.clan_tag)) activeByClan.set(r.clan_tag, new Set());
+    activeByClan.get(r.clan_tag)!.add(r.player_tag);
+  }
+
+  const fmtNum = (n: number) => n.toLocaleString("en-US");
+  const blocks: string[] = [];
+  for (const cat of categories) {
+    const cs = clans.filter((x) => x.category_id === cat.id);
+    if (!cs.length) continue;
+    const lines: string[] = [`**${cat.emoji || "🏰"} ${cat.name}**`];
+    for (const cl of cs) {
+      const meta = metaByTag.get(cl.clan_tag);
+      const name = cl.clan_name || meta?.name || cl.clan_tag;
+      const members = meta?.member_count ?? 0;
+      const status = members >= 50 ? "🔴 FULL" : members >= 45 ? "🟡 LIMITED" : "🟢 OPEN";
+      const donations = donationByClan.get(cl.clan_tag) ?? 0;
+      const active = activeByClan.get(cl.clan_tag)?.size ?? 0;
+      const inactive = Math.max(0, members - active);
+      lines.push(
+        `🏆 **${name}** — ${status}`,
+        `⚔️ Donations: ${fmtNum(donations)}`,
+        `✅ Wars: Active`,
+        `👥 People: ${active} Active | ${inactive} Inactive`,
+        "",
+      );
+    }
+    blocks.push(lines.join("\n"));
+  }
+  const desc = blocks.join("\n").slice(0, 3900) || "No data yet.";
+  return {
+    embeds: [{
+      title: "📊 Family Alliance Statistics",
+      description: desc,
+      color: DEFAULT_COLOR,
+      footer: { text: `Month-to-date donations · activity = last 24h · ${monthKey}` },
+    }],
+    flags: 64,
+    allowed_mentions: { parse: [] },
+  };
 }
 
 // Build per-clan detail embed (live from CoC API). Mentions linked Discord users when known.
