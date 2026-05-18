@@ -7,7 +7,17 @@ const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const DEFAULT_COLOR = 0x5865F2;
 
 export interface FamilyClanRow { id: number; category_id: number; clan_tag: string; clan_name: string; position: number }
-export interface FamilyCategoryRow { id: number; name: string; position: number }
+export interface FamilyCategoryRow {
+  id: number; name: string; position: number;
+  emoji?: string | null; button_label?: string | null;
+  button_style?: number | null; line_format?: string | null;
+}
+export interface FamilyInfoRow {
+  id: number; guild_id: string; key: string; label: string;
+  emoji: string | null; button_style: number;
+  title: string | null; description: string | null; color: number | null;
+  image_url: string | null; thumbnail_url: string | null; position: number;
+}
 export interface FamilyDashboardCfg {
   guild_id: string;
   channel_id: string;
@@ -27,10 +37,36 @@ export interface FamilyDashboardCfg {
 export async function loadFamily(guildId: string) {
   const sb = adminClient();
   const [{ data: cats }, { data: clans }] = await Promise.all([
-    sb.from("family_categories").select("id,name,position").eq("guild_id", guildId).order("position").order("name"),
+    sb.from("family_categories").select("id,name,position,emoji,button_label,button_style,line_format").eq("guild_id", guildId).order("position").order("name"),
     sb.from("family_clans").select("id,category_id,clan_tag,clan_name,position").eq("guild_id", guildId).order("position"),
   ]);
   return { categories: (cats ?? []) as FamilyCategoryRow[], clans: (clans ?? []) as FamilyClanRow[] };
+}
+
+export async function loadFamilyInfo(guildId: string): Promise<FamilyInfoRow[]> {
+  const { data } = await adminClient()
+    .from("family_info_messages")
+    .select("*").eq("guild_id", guildId)
+    .order("position").order("id");
+  return (data ?? []) as FamilyInfoRow[];
+}
+
+// Parse a Discord emoji string. Accepts unicode ("🏆") or custom "<:name:id>" / "<a:name:id>".
+function parseEmoji(s?: string | null): any | undefined {
+  if (!s) return undefined;
+  const t = s.trim();
+  if (!t) return undefined;
+  const m = /^<(a)?:([A-Za-z0-9_~]+):(\d+)>$/.exec(t);
+  if (m) return { name: m[2], id: m[3], animated: !!m[1] };
+  return { name: t };
+}
+
+function packButtonRows(buttons: any[]): any[] {
+  const rows: any[] = [];
+  for (let i = 0; i < buttons.length && rows.length < 5; i += 5) {
+    rows.push({ type: 1, components: buttons.slice(i, i + 5) });
+  }
+  return rows;
 }
 
 export async function refreshClanName(guildId: string, clanTag: string): Promise<string> {
