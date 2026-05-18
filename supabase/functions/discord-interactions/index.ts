@@ -1589,6 +1589,23 @@ Deno.serve(async (req) => {
         const data = await buildClanDetailEmbed(tag, guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data: { ...data, flags: 64 } }), { headers: { "Content-Type": "application/json" } });
       }
+      if (cid.startsWith("fam:cat:")) {
+        const guildId = interaction.guild_id ?? "";
+        const catId = parseInt(cid.split(":")[2] ?? "0", 10);
+        const data = await buildCategoryListPayload(guildId, catId);
+        return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (cid.startsWith("fam:info:")) {
+        const guildId = interaction.guild_id ?? "";
+        const infoId = parseInt(cid.split(":")[2] ?? "0", 10);
+        const data = await buildInfoPayload(guildId, infoId);
+        return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
+      }
+      if (cid === "fam:stats") {
+        const guildId = interaction.guild_id ?? "";
+        const data = await buildFamilyStatsPayload(guildId);
+        return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
+      }
       if (cid.startsWith("coc:pick:")) {
         // coc:pick:<cmdName>:<targetUserOrEmpty>:<forUserId>
         const parts = cid.split(":");
