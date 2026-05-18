@@ -164,13 +164,13 @@ export async function buildRepsPayload(opts: {
 //   Remaining (38/50):
 //   (0/2) {TH} name | `#TAG` @mention
 export async function buildReminderPayload(opts: {
-  reminderLabel: string; // "War Started" or "2h reminder"
+  reminderLabel: string;
   emoji: string;
-  war: any; // wars row
+  war: any;
   current: CurrentWar;
   slot?: "war_started" | "war_reminder";
   minutes?: number;
-}): Promise<{ content: string; allowed_mentions: any }> {
+}): Promise<Array<{ content: string; allowed_mentions: any }>> {
   const thMap = await loadThEmojis();
   const sb = adminClient();
   const ours = opts.current.clan!;
@@ -179,7 +179,6 @@ export async function buildReminderPayload(opts: {
   const teamSize = opts.current.teamSize ?? members.length;
   const maxAttacks = teamSize * 2;
 
-  // Pull discord links for these tags
   const tags = members.map((m) => m.tag);
   const links: Record<string, string> = {};
   if (tags.length) {
@@ -189,7 +188,6 @@ export async function buildReminderPayload(opts: {
     }
   }
 
-  // Stats
   let usedAttacks = 0;
   let starsEarned = 0;
   for (const m of members) {
@@ -197,26 +195,19 @@ export async function buildReminderPayload(opts: {
     usedAttacks += atks.length;
     for (const a of atks) starsEarned += a.stars;
   }
-  const remainingCount = members.filter((m) => (m.attacks?.length ?? 0) < 2).length;
 
-  const mentionedUsers: string[] = [];
-  // Sort: TH desc, then map position asc
+  // Sort: TH desc, then map position asc — list ALL members
   const sorted = members.slice().sort((a, b) => (b.townhallLevel - a.townhallLevel) || (a.mapPosition - b.mapPosition));
-  const lines = sorted
-    .map((m) => {
-      const used = m.attacks?.length ?? 0;
-      const left = 2 - used;
-      if (left <= 0) return null;
-      let mention = "";
-      if (links[m.tag]) {
-        mention = ` | <@${links[m.tag]}>`;
-        mentionedUsers.push(links[m.tag]);
-      }
-      return `(${used}/2) ${thEmoji(thMap, m.townhallLevel)} ${m.name} | \`${m.tag}\`${mention}`;
-    })
-    .filter(Boolean) as string[];
+  const memberLines: { line: string; userId?: string }[] = sorted.map((m) => {
+    const used = m.attacks?.length ?? 0;
+    const userId = links[m.tag];
+    const mention = userId ? ` | <@${userId}>` : "";
+    return {
+      line: `(${used}/2) ${thEmoji(thMap, m.townhallLevel)} ${m.name} | \`${m.tag}\`${mention}`,
+      userId,
+    };
+  });
 
-  // Header: "12h Remaining in War" (or label override for war_started)
   const endTs = parseCocTime(opts.current.endTime ?? "")?.getTime();
   const nowMs = Date.now();
   let headerLabel = opts.reminderLabel;
@@ -229,37 +220,62 @@ export async function buildReminderPayload(opts: {
       : `${mins}m Remaining in War`;
   }
 
-  const headLine1 = `${opts.emoji} **${headerLabel}**`;
-  const headLine2 = `**${ours.name}** vs **${opp.name}**`;
-  const statsLine = `⚔️ ${usedAttacks}/${maxAttacks}   ⭐ ${starsEarned}/${teamSize * 3}`;
-  const timeLine = endTs ? `🕒 <t:${Math.floor(endTs / 1000)}:F> (<t:${Math.floor(endTs / 1000)}:R>)` : "";
+  const tsRel = endTs ? `<t:${Math.floor(endTs / 1000)}:R>` : "";
+  const headerBlock = [
+    `${opts.emoji} **${headerLabel}**`,
+    `📌 **${ours.name}** vs **${opp.name}**`,
+    `⚔️ ${usedAttacks}/${maxAttacks}  ⭐ ${starsEarned}/${teamSize * 3}  🕒 ${tsRel}`.trim(),
+    "",
+  ].join("\n");
 
-  // Body (may need to be chunked to fit 2000 chars; we keep it simple and slice)
-  const remainingHeader = `Remaining (${remainingCount}/${teamSize}):`;
-  const body = lines.length ? `${remainingHeader}\n${lines.join("\n")}` : "✅ All attacks used!";
-  let content = [headLine1, headLine2, statsLine, timeLine, "", body].filter(Boolean).join("\n").slice(0, 1990);
+  // Chunk into messages under 2000 chars. Header goes on first message only.
+  const MAX = 1950;
+  const chunks: { content: string; users: string[] }[] = [];
+  let curLines: string[] = [];
+  let curUsers: string[] = [];
+  let curLen = headerBlock.length;
+  let isFirst = true;
 
-  // Dedupe user IDs and cap to 100 (Discord limit)
-  const uniqueUsers = Array.from(new Set(mentionedUsers)).slice(0, 100);
+  const flush = () => {
+    const prefix = isFirst ? headerBlock : "*(continued)*\n";
+    chunks.push({ content: prefix + curLines.join("\n"), users: curUsers });
+    isFirst = false;
+    curLines = [];
+    curUsers = [];
+    curLen = prefix.length;
+  };
 
-  // Allow guild template to override the content (placeholders interpolated).
+  for (const ml of memberLines) {
+    const addLen = ml.line.length + 1;
+    if (curLen + addLen > MAX && curLines.length) flush();
+    curLines.push(ml.line);
+    if (ml.userId) curUsers.push(ml.userId);
+    curLen += addLen;
+  }
+  if (curLines.length || isFirst) flush();
+
+  // Allow guild template to override the FIRST message content (placeholders interpolated).
   const slot = opts.slot ?? (opts.reminderLabel.toLowerCase().includes("started") ? "war_started" : "war_reminder");
   if (opts.war?.guild_id) {
     try {
       const { applyTemplate } = await import("./embed_templates.ts");
-      const end = parseCocTime(opts.current.endTime ?? "")?.getTime();
+      const allUsers = Array.from(new Set(memberLines.map((m) => m.userId).filter(Boolean) as string[]));
       const vars = {
         clan: ours.name, opponent: opp.name,
         team_size: opts.current.teamSize ?? "",
-        end_time: end ? `<t:${Math.floor(end / 1000)}:R>` : "",
-        ping: uniqueUsers.map((u) => `<@${u}>`).join(" "),
+        end_time: tsRel,
+        ping: allUsers.map((u) => `<@${u}>`).join(" "),
         minutes: opts.minutes ?? "",
       };
       const r = await applyTemplate(opts.war.guild_id, slot, {}, { vars });
-      if (r.content) content = r.content.slice(0, 1990);
+      if (r.content) chunks[0].content = r.content.slice(0, 1990);
     } catch (e) { console.error("template apply (reminder)", e); }
   }
-  return { content, allowed_mentions: { users: uniqueUsers } };
+
+  return chunks.map((c) => ({
+    content: c.content.slice(0, 1990),
+    allowed_mentions: { users: Array.from(new Set(c.users)).slice(0, 100) },
+  }));
 }
 
 // --- Rule evaluation ---
