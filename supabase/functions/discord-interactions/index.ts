@@ -829,7 +829,8 @@ const HELP_SECTIONS: { title: string; lines: string[] }[] = [
   {
     title: "🏛️ Family Dashboard",
     lines: [
-      "`/family_category add|remove|rename|list` — Manage categories *(admin)*",
+      "`/family_category add|edit|remove|rename|list` — Categories (buttons on dashboard) *(admin)*",
+      "`/family_info add|edit|remove|list` — Custom info buttons (e.g. What is FWA?) *(admin)*",
       "`/family_clan add|remove|move|list` — Manage clans in categories *(admin)*",
       "`/family_clan_dashboard [channel]` — Post / re-bind the dashboard message *(admin)*",
       "`/family_customize ...` — Title, color, footer, line format, images *(admin)*",
