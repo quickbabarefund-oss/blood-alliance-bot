@@ -1043,19 +1043,52 @@ async function handleFamilyCategory(interaction: any): Promise<Response> {
   const sb = adminClient();
   const { sub, options } = getSubOptions(interaction.data.options);
 
+  const styleLabel = (n?: number | null) => ({ 1: "Blurple", 2: "Grey", 3: "Green", 4: "Red" } as any)[n ?? 2] ?? "Grey";
+
   if (sub === "list") {
-    const { data } = await sb.from("family_categories").select("id,name,position").eq("guild_id", guildId).order("position").order("name");
+    const { data } = await sb.from("family_categories")
+      .select("id,name,position,emoji,button_label,button_style,line_format")
+      .eq("guild_id", guildId).order("position").order("name");
     if (!data?.length) return reply("No categories yet. Add one with `/family_category add <name>`.");
-    return reply(data.map((c, i) => `\`${i + 1}.\` **${c.name}**`).join("\n"));
+    return reply(data.map((c: any, i: number) => {
+      const label = c.button_label?.trim() || c.name;
+      return `\`${i + 1}.\` ${c.emoji ?? "🏰"} **${c.name}** — Button: ${styleLabel(c.button_style)} "${label}"`;
+    }).join("\n"));
   }
 
   if (sub === "add") {
     const name = String(getOpt(options, "name") ?? "").trim();
     if (!name) return reply("Name is required.");
-    const { error } = await sb.from("family_categories").insert({ guild_id: guildId, name });
+    const row: Record<string, any> = { guild_id: guildId, name };
+    const emoji = getOpt(options, "emoji"); if (emoji != null) row.emoji = String(emoji);
+    const lbl = getOpt(options, "button_label"); if (lbl != null) row.button_label = String(lbl);
+    const style = getOpt(options, "button_style"); if (style != null) row.button_style = Number(style);
+    const lf = getOpt(options, "line_format"); if (lf != null) row.line_format = String(lf);
+    const { error } = await sb.from("family_categories").insert(row);
     if (error) return reply(`❌ ${error.message}`);
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
-    return reply(`✅ Category **${name}** created.`);
+    return reply(`✅ Category **${name}** created${row.emoji ? ` ${row.emoji}` : ""}.`);
+  }
+  if (sub === "edit") {
+    const name = String(getOpt(options, "name") ?? "").trim();
+    if (!name) return reply("`name` is required.");
+    const patch: Record<string, any> = {};
+    const setNullable = (key: string, v: any) => {
+      if (v == null) return;
+      const s = String(v);
+      patch[key] = s === "-" ? null : s;
+    };
+    setNullable("emoji", getOpt(options, "emoji"));
+    setNullable("button_label", getOpt(options, "button_label"));
+    setNullable("line_format", getOpt(options, "line_format"));
+    const newName = getOpt(options, "new_name"); if (newName != null) patch.name = String(newName);
+    const style = getOpt(options, "button_style"); if (style != null) patch.button_style = Number(style);
+    const pos = getOpt(options, "position"); if (pos != null) patch.position = Number(pos);
+    if (!Object.keys(patch).length) return reply("Nothing to update.");
+    const { error } = await sb.from("family_categories").update(patch).eq("guild_id", guildId).ilike("name", name);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`✏️ Updated **${name}**: ${Object.keys(patch).join(", ")}.`);
   }
   if (sub === "remove") {
     const name = String(getOpt(options, "name") ?? "").trim();
@@ -1071,6 +1104,87 @@ async function handleFamilyCategory(interaction: any): Promise<Response> {
     if (error) return reply(`❌ ${error.message}`);
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
     return reply(`✏️ Renamed **${oldName}** → **${newName}**.`);
+  }
+  return reply("Unknown subcommand.");
+}
+
+async function handleFamilyInfo(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_info"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { sub, options } = getSubOptions(interaction.data.options);
+
+  if (sub === "list") {
+    const { data } = await sb.from("family_info_messages")
+      .select("key,label,emoji,position").eq("guild_id", guildId)
+      .order("position").order("id");
+    if (!data?.length) return reply("No info entries. Add one with `/family_info add`.");
+    return reply(data.map((r: any, i: number) =>
+      `\`${i + 1}.\` ${r.emoji ?? "ℹ️"} **${r.label}** — key: \`${r.key}\``).join("\n"));
+  }
+
+  if (sub === "add") {
+    const key = String(getOpt(options, "key") ?? "").trim();
+    const label = String(getOpt(options, "label") ?? "").trim();
+    const title = String(getOpt(options, "title") ?? "").trim();
+    const message = String(getOpt(options, "message") ?? "").trim();
+    if (!key || !label || !title || !message) return reply("`key`, `label`, `title`, `message` are required.");
+    const row: Record<string, any> = {
+      guild_id: guildId, key, label, title,
+      description: message.replace(/\\n/g, "\n"),
+    };
+    const emoji = getOpt(options, "emoji"); if (emoji != null) row.emoji = String(emoji);
+    const style = getOpt(options, "button_style"); if (style != null) row.button_style = Number(style);
+    const color = getOpt(options, "color");
+    if (color != null) {
+      const c = parseHexColor(String(color));
+      if (c == null) return reply("❌ Invalid color. Use a hex like `#5865F2`.");
+      row.color = c;
+    }
+    const img = getOpt(options, "image_url"); if (img != null) row.image_url = String(img);
+    const thumb = getOpt(options, "thumbnail_url"); if (thumb != null) row.thumbnail_url = String(thumb);
+    const { error } = await sb.from("family_info_messages").insert(row);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`✅ Info **${label}** added (key \`${key}\`).`);
+  }
+  if (sub === "edit") {
+    const key = String(getOpt(options, "key") ?? "").trim();
+    if (!key) return reply("`key` is required.");
+    const patch: Record<string, any> = {};
+    const setNullable = (k: string, v: any) => { if (v == null) return; const s = String(v); patch[k] = s === "-" ? null : s; };
+    setNullable("label", getOpt(options, "label"));
+    setNullable("title", getOpt(options, "title"));
+    const msg = getOpt(options, "message");
+    if (msg != null) { const s = String(msg); patch.description = s === "-" ? null : s.replace(/\\n/g, "\n"); }
+    setNullable("emoji", getOpt(options, "emoji"));
+    setNullable("image_url", getOpt(options, "image_url"));
+    setNullable("thumbnail_url", getOpt(options, "thumbnail_url"));
+    const style = getOpt(options, "button_style"); if (style != null) patch.button_style = Number(style);
+    const pos = getOpt(options, "position"); if (pos != null) patch.position = Number(pos);
+    const color = getOpt(options, "color");
+    if (color != null) {
+      const s = String(color);
+      if (s === "-") patch.color = null;
+      else {
+        const c = parseHexColor(s);
+        if (c == null) return reply("❌ Invalid color. Use a hex like `#5865F2`.");
+        patch.color = c;
+      }
+    }
+    if (!Object.keys(patch).length) return reply("Nothing to update.");
+    patch.updated_at = new Date().toISOString();
+    const { error } = await sb.from("family_info_messages").update(patch).eq("guild_id", guildId).eq("key", key);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`✏️ Updated info \`${key}\`: ${Object.keys(patch).filter((k) => k !== "updated_at").join(", ")}.`);
+  }
+  if (sub === "remove") {
+    const key = String(getOpt(options, "key") ?? "").trim();
+    const { error } = await sb.from("family_info_messages").delete().eq("guild_id", guildId).eq("key", key);
+    if (error) return reply(`❌ ${error.message}`);
+    syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+    return reply(`🗑️ Removed info \`${key}\`.`);
   }
   return reply("Unknown subcommand.");
 }
