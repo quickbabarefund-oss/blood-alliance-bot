@@ -11,7 +11,7 @@ import { canRunCommand } from "../_shared/permissions.ts";
 import { syncGuildCommands, createMessage, createMessageWithFile } from "../_shared/discord.ts";
 import { COMMANDS } from "../_shared/commands.ts";
 import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from "../_shared/war.ts";
-import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName } from "../_shared/family.ts";
+import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName, buildCategoryListPayload, buildInfoPayload, buildFamilyStatsPayload } from "../_shared/family.ts";
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
   buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
