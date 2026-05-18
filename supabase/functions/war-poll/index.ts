@@ -111,8 +111,8 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
           const label = r.minutes >= 60 && r.minutes % 60 === 0
             ? `${r.minutes / 60}h ${r.anchor === "before_end" ? "before war ends" : "into battle day"}`
             : `${r.minutes}m ${r.anchor === "before_end" ? "before war ends" : "into battle day"}`;
-          const payload = await buildReminderPayload({ reminderLabel: `${label} reminder`, emoji: "⏰", war, current: cw, slot: "war_reminder", minutes: r.minutes });
-          await createMessage(cfg.log_channel_id, payload);
+          const payloads = await buildReminderPayload({ reminderLabel: `${label} reminder`, emoji: "⏰", war, current: cw, slot: "war_reminder", minutes: r.minutes });
+          for (const p of payloads) await createMessage(cfg.log_channel_id, p);
           fired.push(r.id);
           await sb.from("wars").update({ fired_reminders: fired, updated_at: new Date().toISOString() }).eq("id", war.id);
         } catch (e) { console.error("reminder post failed", war.id, r.id, e); }
