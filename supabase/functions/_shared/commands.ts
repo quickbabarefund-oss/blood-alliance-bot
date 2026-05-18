@@ -252,20 +252,43 @@ export const COMMANDS: any[] = [
   },
   {
     name: "family_category",
-    description: "Manage Family Dashboard categories (e.g. Farming, War, Competitive)",
+    description: "Manage Family Dashboard categories (e.g. FWA, WAR, CWL)",
     default_member_permissions: ADMIN_ONLY,
     options: [
-      { type: SUB, name: "add", description: "Create a new category", options: [
-        { type: STRING, name: "name", description: "Category name", required: true },
+      { type: SUB, name: "add", description: "Create a new category (becomes a button on the dashboard)", options: [
+        { type: STRING, name: "name", description: "Category name (also the button label by default)", required: true },
+        { type: STRING, name: "emoji", description: "Emoji shown on the button (e.g. 🏆 ⚔️ 👑)" },
+        { type: STRING, name: "button_label", description: "Override the button text (defaults to name)" },
+        { type: INTEGER, name: "button_style", description: "Button color", choices: [
+          { name: "Blurple (Primary)", value: 1 },
+          { name: "Grey (Secondary)", value: 2 },
+          { name: "Green (Success)", value: 3 },
+          { name: "Red (Danger)", value: 4 },
+        ]},
+        { type: STRING, name: "line_format", description: "Per-clan line format. Vars: {i} {name} {tag}" },
+      ]},
+      { type: SUB, name: "edit", description: "Update an existing category's button look", options: [
+        { type: STRING, name: "name", description: "Existing category name", required: true },
+        { type: STRING, name: "new_name", description: "Rename the category" },
+        { type: STRING, name: "emoji", description: "Emoji ('-' to clear)" },
+        { type: STRING, name: "button_label", description: "Override button label ('-' to clear)" },
+        { type: INTEGER, name: "button_style", description: "Button color", choices: [
+          { name: "Blurple (Primary)", value: 1 },
+          { name: "Grey (Secondary)", value: 2 },
+          { name: "Green (Success)", value: 3 },
+          { name: "Red (Danger)", value: 4 },
+        ]},
+        { type: STRING, name: "line_format", description: "Per-clan line format ('-' to clear)" },
+        { type: INTEGER, name: "position", description: "Sort order (lower = first)" },
       ]},
       { type: SUB, name: "remove", description: "Delete a category and all its clans", options: [
         { type: STRING, name: "name", description: "Category name", required: true },
       ]},
-      { type: SUB, name: "rename", description: "Rename a category", options: [
+      { type: SUB, name: "rename", description: "Rename a category (use /family_category edit for full control)", options: [
         { type: STRING, name: "old_name", description: "Current name", required: true },
         { type: STRING, name: "new_name", description: "New name", required: true },
       ]},
-      { type: SUB, name: "list", description: "List all categories" },
+      { type: SUB, name: "list", description: "List all categories with their button styling" },
     ],
   },
   {
@@ -286,6 +309,50 @@ export const COMMANDS: any[] = [
         { type: STRING, name: "to_category", description: "Destination category", required: true },
       ]},
       { type: SUB, name: "list", description: "List all clans grouped by category" },
+    ],
+  },
+  {
+    name: "family_info",
+    description: "Manage info buttons on the Family Dashboard (e.g. 'What is FWA?')",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: SUB, name: "add", description: "Add a new info button + message", options: [
+        { type: STRING, name: "key", description: "Unique key (e.g. what_is_fwa)", required: true },
+        { type: STRING, name: "label", description: "Button label (e.g. What is FWA?)", required: true },
+        { type: STRING, name: "title", description: "Embed title", required: true },
+        { type: STRING, name: "message", description: "Embed body (\\n for new lines)", required: true },
+        { type: STRING, name: "emoji", description: "Button emoji (e.g. ❗ 🎓)" },
+        { type: INTEGER, name: "button_style", description: "Button color", choices: [
+          { name: "Blurple (Primary)", value: 1 },
+          { name: "Grey (Secondary)", value: 2 },
+          { name: "Green (Success)", value: 3 },
+          { name: "Red (Danger)", value: 4 },
+        ]},
+        { type: STRING, name: "color", description: "Embed hex color (e.g. #F1B93B)" },
+        { type: STRING, name: "image_url", description: "Large image URL" },
+        { type: STRING, name: "thumbnail_url", description: "Thumbnail URL" },
+      ]},
+      { type: SUB, name: "edit", description: "Update an existing info entry", options: [
+        { type: STRING, name: "key", description: "Existing key", required: true },
+        { type: STRING, name: "label", description: "Button label ('-' to clear)" },
+        { type: STRING, name: "title", description: "Embed title ('-' to clear)" },
+        { type: STRING, name: "message", description: "Embed body ('-' to clear)" },
+        { type: STRING, name: "emoji", description: "Button emoji ('-' to clear)" },
+        { type: INTEGER, name: "button_style", description: "Button color", choices: [
+          { name: "Blurple (Primary)", value: 1 },
+          { name: "Grey (Secondary)", value: 2 },
+          { name: "Green (Success)", value: 3 },
+          { name: "Red (Danger)", value: 4 },
+        ]},
+        { type: STRING, name: "color", description: "Embed hex color ('-' to clear)" },
+        { type: STRING, name: "image_url", description: "Image URL ('-' to clear)" },
+        { type: STRING, name: "thumbnail_url", description: "Thumbnail URL ('-' to clear)" },
+        { type: INTEGER, name: "position", description: "Sort order among info buttons" },
+      ]},
+      { type: SUB, name: "remove", description: "Delete an info entry", options: [
+        { type: STRING, name: "key", description: "Key to remove", required: true },
+      ]},
+      { type: SUB, name: "list", description: "List all info entries" },
     ],
   },
   {
