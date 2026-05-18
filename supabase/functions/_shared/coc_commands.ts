@@ -6,7 +6,7 @@
 import { adminClient } from "./leaderboard.ts";
 import { normalizeTag, postCoc, fetchClan, fetchPlayer } from "./coc.ts";
 import { applyTemplate } from "./embed_templates.ts";
-import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink } from "./war.ts";
+import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink, compositionLine } from "./war.ts";
 
 const COLOR = 0x5865F2;
 const COLOR_GREEN = 0x57F287;
@@ -188,6 +188,7 @@ export async function buildCurrentWar(guildId: string, args: { tag?: string; tar
   const end = parseCocTime(cw.endTime ?? "")?.getTime();
   const start = parseCocTime(cw.startTime ?? "")?.getTime();
   const stateLabel = cw.state === "preparation" ? "📦 Preparation" : cw.state === "inWar" ? "⚔️ Battle Day" : "🏁 Ended";
+  const thMap = await loadThEmojis();
   const fields = [
     { name: "Status", value: stateLabel, inline: true },
     { name: "Team Size", value: `${cw.teamSize ?? "—"} vs ${cw.teamSize ?? "—"}`, inline: true },
@@ -197,6 +198,8 @@ export async function buildCurrentWar(guildId: string, args: { tag?: string; tar
     { name: "⭐ Stars", value: `**${ours.stars ?? 0}** vs ${opp.stars ?? 0}`, inline: true },
     { name: "💥 Destruction", value: `**${(ours.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%** vs ${(opp.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%`, inline: true },
     { name: "🗡️ Attacks Used", value: `${ours.attacks ?? 0}/${(cw.teamSize ?? 0) * 2}`, inline: true },
+    { name: `🏠 ${ours.name} Composition`, value: compositionLine(ours.members, thMap), inline: false },
+    { name: `🏠 ${opp.name} Composition`, value: compositionLine(opp.members, thMap), inline: false },
     { name: "🔗 Links", value: `[Us — ChocolateClash](${ccClanLink(tag)}) • [Opponent — ChocolateClash](${ccClanLink(opp.tag)})`, inline: false },
   ];
   const base = {
