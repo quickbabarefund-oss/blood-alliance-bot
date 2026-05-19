@@ -1684,6 +1684,78 @@ Deno.serve(async (req) => {
         const data = await buildFamilyStatsPayload(guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
       }
+      // Reorder: step 1 — user picked an item to move; show position picker
+      if (cid.startsWith("fam:reorder:pick:")) {
+        const guildId = interaction.guild_id ?? "";
+        const kind = cid.split(":")[3] as "cat" | "info";
+        const itemId = interaction.data?.values?.[0];
+        const table = kind === "cat" ? "family_categories" : "family_info_messages";
+        const sbR = adminClient();
+        const { data: all } = await sbR.from(table)
+          .select(kind === "cat" ? "id,name,emoji,position" : "id,key,label,emoji,position")
+          .eq("guild_id", guildId)
+          .order("position").order(kind === "cat" ? "name" : "id");
+        const items = (all ?? []) as any[];
+        const picked = items.find((x) => String(x.id) === String(itemId));
+        if (!picked) {
+          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: { content: "Item not found.", components: [], flags: 64 } }), { headers: { "Content-Type": "application/json" } });
+        }
+        const n = items.length;
+        const options = Array.from({ length: Math.min(n, 25) }, (_, i) => ({
+          label: `Position ${i + 1}`,
+          description: items[i] ? `currently: ${(items[i].name ?? items[i].label).slice(0, 80)}` : undefined,
+          value: String(i + 1),
+        }));
+        const pickedLabel = picked.name ?? picked.label;
+        return new Response(JSON.stringify({
+          type: RESP_UPDATE_MESSAGE,
+          data: {
+            content: `Moving **${pickedLabel}** — pick its new position:`,
+            flags: 64,
+            components: [{
+              type: 1,
+              components: [{
+                type: 3,
+                custom_id: `fam:reorder:apply:${kind}:${itemId}`,
+                placeholder: "Choose new position",
+                options,
+              }],
+            }],
+          },
+        }), { headers: { "Content-Type": "application/json" } });
+      }
+      // Reorder: step 2 — apply new position; re-number siblings
+      if (cid.startsWith("fam:reorder:apply:")) {
+        const guildId = interaction.guild_id ?? "";
+        const parts = cid.split(":");
+        const kind = parts[3] as "cat" | "info";
+        const itemId = parts[4];
+        const target = parseInt(interaction.data?.values?.[0] ?? "1", 10);
+        const table = kind === "cat" ? "family_categories" : "family_info_messages";
+        const sbR = adminClient();
+        const { data: all } = await sbR.from(table)
+          .select("id,position").eq("guild_id", guildId)
+          .order("position").order(kind === "cat" ? "name" : "id");
+        const items = (all ?? []) as Array<{ id: number; position: number }>;
+        const fromIdx = items.findIndex((x) => String(x.id) === String(itemId));
+        if (fromIdx < 0) {
+          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: { content: "Item not found.", components: [], flags: 64 } }), { headers: { "Content-Type": "application/json" } });
+        }
+        const moved = items.splice(fromIdx, 1)[0];
+        const toIdx = Math.max(0, Math.min(items.length, target - 1));
+        items.splice(toIdx, 0, moved);
+        // Re-number sequentially starting at 1
+        for (let i = 0; i < items.length; i++) {
+          if ((items[i].position ?? -1) !== i + 1) {
+            await sbR.from(table).update({ position: i + 1 }).eq("id", items[i].id);
+          }
+        }
+        syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+        return new Response(JSON.stringify({
+          type: RESP_UPDATE_MESSAGE,
+          data: { content: `✅ Moved to position **${toIdx + 1}**. Dashboard refreshing…`, components: [], flags: 64 },
+        }), { headers: { "Content-Type": "application/json" } });
+      }
       if (cid.startsWith("coc:pick:")) {
         // coc:pick:<cmdName>:<targetUserOrEmpty>:<forUserId>
         const parts = cid.split(":");
