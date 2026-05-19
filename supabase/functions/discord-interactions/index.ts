@@ -1148,6 +1148,7 @@ async function handleFamilyInfo(interaction: any): Promise<Response> {
     }
     const img = getOpt(options, "image_url"); if (img != null) row.image_url = String(img);
     const thumb = getOpt(options, "thumbnail_url"); if (thumb != null) row.thumbnail_url = String(thumb);
+    const pos = getOpt(options, "position"); if (pos != null) row.position = Number(pos);
     const { error } = await sb.from("family_info_messages").insert(row);
     if (error) return reply(`❌ ${error.message}`);
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
