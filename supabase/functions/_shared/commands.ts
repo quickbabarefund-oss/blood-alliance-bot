@@ -333,6 +333,7 @@ export const COMMANDS: any[] = [
         { type: STRING, name: "color", description: "Embed hex color (e.g. #F1B93B)" },
         { type: STRING, name: "image_url", description: "Large image URL" },
         { type: STRING, name: "thumbnail_url", description: "Thumbnail URL" },
+        { type: INTEGER, name: "position", description: "Sort order on dashboard (lower = first)" },
       ]},
       { type: SUB, name: "edit", description: "Update an existing info entry", options: [
         { type: STRING, name: "key", description: "Existing key", required: true },
@@ -349,12 +350,22 @@ export const COMMANDS: any[] = [
         { type: STRING, name: "color", description: "Embed hex color ('-' to clear)" },
         { type: STRING, name: "image_url", description: "Image URL ('-' to clear)" },
         { type: STRING, name: "thumbnail_url", description: "Thumbnail URL ('-' to clear)" },
-        { type: INTEGER, name: "position", description: "Sort order among info buttons" },
+        { type: INTEGER, name: "position", description: "Sort order on dashboard" },
       ]},
       { type: SUB, name: "remove", description: "Delete an info entry", options: [
         { type: STRING, name: "key", description: "Key to remove", required: true },
       ]},
+      { type: SUB, name: "reorder", description: "Reorder info buttons interactively" },
       { type: SUB, name: "list", description: "List all info entries" },
+    ],
+  },
+  {
+    name: "family_dashboard_layout",
+    description: "Control the Clan Statistics button position & visibility on the Family Dashboard",
+    default_member_permissions: ADMIN_ONLY,
+    options: [
+      { type: INTEGER, name: "stats_position", description: "Where the 📊 Clan Statistics button sits (lower = first). 9999 = last." },
+      { type: BOOLEAN, name: "stats_enabled", description: "Show / hide the Clan Statistics button" },
     ],
   },
   {
