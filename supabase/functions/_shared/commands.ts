@@ -266,6 +266,7 @@ export const COMMANDS: any[] = [
           { name: "Red (Danger)", value: 4 },
         ]},
         { type: STRING, name: "line_format", description: "Per-clan line format. Vars: {i} {name} {tag}" },
+        { type: INTEGER, name: "position", description: "Sort order on dashboard (lower = first)" },
       ]},
       { type: SUB, name: "edit", description: "Update an existing category's button look", options: [
         { type: STRING, name: "name", description: "Existing category name", required: true },
@@ -288,6 +289,7 @@ export const COMMANDS: any[] = [
         { type: STRING, name: "old_name", description: "Current name", required: true },
         { type: STRING, name: "new_name", description: "New name", required: true },
       ]},
+      { type: SUB, name: "reorder", description: "Reorder category buttons interactively" },
       { type: SUB, name: "list", description: "List all categories with their button styling" },
     ],
   },
