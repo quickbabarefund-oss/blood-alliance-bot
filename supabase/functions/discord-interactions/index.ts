@@ -829,11 +829,12 @@ const HELP_SECTIONS: { title: string; lines: string[] }[] = [
   {
     title: "🏛️ Family Dashboard",
     lines: [
-      "`/family_category add|edit|remove|rename|list` — Categories (buttons on dashboard) *(admin)*",
-      "`/family_info add|edit|remove|list` — Custom info buttons (e.g. What is FWA?) *(admin)*",
+      "`/family_category add|edit|remove|rename|reorder|list` — Categories (buttons on dashboard) *(admin)*",
+      "`/family_info add|edit|remove|reorder|list` — Custom info buttons (e.g. What is FWA?) *(admin)*",
       "`/family_clan add|remove|move|list` — Manage clans in categories *(admin)*",
       "`/family_clan_dashboard [channel]` — Post / re-bind the dashboard message *(admin)*",
       "`/family_customize ...` — Title, color, footer, line format, images *(admin)*",
+      "`/family_dashboard_layout stats_position:<n> stats_enabled:<bool>` — Move/hide the 📊 Clan Statistics button *(admin)*",
       "`/embed_editor` — Open the web-based embed builder *(admin)*",
     ],
   },
