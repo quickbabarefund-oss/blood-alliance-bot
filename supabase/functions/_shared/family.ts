@@ -96,42 +96,57 @@ export async function buildDashboardPayload(guildId: string, cfg?: FamilyDashboa
     cfg = data as FamilyDashboardCfg | null;
   }
   const c = cfg ?? ({} as FamilyDashboardCfg);
-  const [{ categories, clans }, infos] = await Promise.all([
+  const [{ categories, clans }, infos, layoutRow] = await Promise.all([
     loadFamily(guildId),
     loadFamilyInfo(guildId),
+    sb.from("family_dashboard_layout").select("stats_position,stats_enabled").eq("guild_id", guildId).maybeSingle().then((r) => r.data as { stats_position: number; stats_enabled: boolean } | null),
   ]);
+  const statsPosition = layoutRow?.stats_position ?? 9999;
+  const statsEnabled = layoutRow ? layoutRow.stats_enabled : true;
 
-  // Build button list: one per category, then info entries, then a Clan Statistics button.
-  const buttons: any[] = [];
+  // Build a unified, position-sorted list of buttons (categories + info entries),
+  // then splice the Clan Statistics button at the configured position.
+  type Btn = { pos: number; button: any };
+  const items: Btn[] = [];
   for (const cat of categories) {
     const label = (cat.button_label?.trim() || cat.name).slice(0, 80);
-    buttons.push({
-      type: 2,
-      style: cat.button_style ?? 2,
-      label,
-      emoji: parseEmoji(cat.emoji),
-      custom_id: `fam:cat:${cat.id}`,
+    items.push({
+      pos: cat.position ?? 0,
+      button: {
+        type: 2,
+        style: cat.button_style ?? 2,
+        label,
+        emoji: parseEmoji(cat.emoji),
+        custom_id: `fam:cat:${cat.id}`,
+      },
     });
   }
   for (const info of infos) {
-    buttons.push({
-      type: 2,
-      style: info.button_style ?? 2,
-      label: (info.label || info.key).slice(0, 80),
-      emoji: parseEmoji(info.emoji),
-      custom_id: `fam:info:${info.id}`,
+    items.push({
+      pos: info.position ?? 0,
+      button: {
+        type: 2,
+        style: info.button_style ?? 2,
+        label: (info.label || info.key).slice(0, 80),
+        emoji: parseEmoji(info.emoji),
+        custom_id: `fam:info:${info.id}`,
+      },
     });
   }
-  // Reserve room for Clan Statistics if we have any clans tracked.
-  if (clans.length) {
-    if (buttons.length < 25) {
-      buttons.push({
-        type: 2, style: 2, label: "Clan Statistics",
-        emoji: parseEmoji("📊"),
-        custom_id: `fam:stats`,
-      });
-    }
+  // Stable sort by position then by insertion order
+  items.sort((a, b) => a.pos - b.pos);
+  if (statsEnabled && clans.length) {
+    const statsBtn = {
+      type: 2, style: 2, label: "Clan Statistics",
+      emoji: parseEmoji("📊"),
+      custom_id: `fam:stats`,
+    };
+    // Insert at first index where existing pos >= statsPosition, else append
+    let idx = items.findIndex((it) => it.pos >= statsPosition);
+    if (idx < 0) idx = items.length;
+    items.splice(idx, 0, { pos: statsPosition, button: statsBtn });
   }
+  const buttons = items.slice(0, 25).map((it) => it.button);
   const components = packButtonRows(buttons);
 
   // Build the embed body. If admin hasn't set a description we keep the
