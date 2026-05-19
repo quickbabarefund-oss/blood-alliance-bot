@@ -1837,6 +1837,7 @@ Deno.serve(async (req) => {
         case "donation_reset": return await handleDonationReset(interaction);
         case "family_category": return await handleFamilyCategory(interaction);
         case "family_info": return await handleFamilyInfo(interaction);
+        case "family_dashboard_layout": return await handleFamilyDashboardLayout(interaction);
         case "family_clan": return await handleFamilyClan(interaction);
         case "family_clan_dashboard": return await handleFamilyDashboard(interaction);
         case "family_customize": return await handleFamilyCustomize(interaction);
