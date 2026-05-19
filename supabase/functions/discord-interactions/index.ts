@@ -1065,6 +1065,7 @@ async function handleFamilyCategory(interaction: any): Promise<Response> {
     const lbl = getOpt(options, "button_label"); if (lbl != null) row.button_label = String(lbl);
     const style = getOpt(options, "button_style"); if (style != null) row.button_style = Number(style);
     const lf = getOpt(options, "line_format"); if (lf != null) row.line_format = String(lf);
+    const pos = getOpt(options, "position"); if (pos != null) row.position = Number(pos);
     const { error } = await sb.from("family_categories").insert(row);
     if (error) return reply(`❌ ${error.message}`);
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
