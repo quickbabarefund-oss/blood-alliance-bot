@@ -1216,38 +1216,51 @@ async function handleFamilyDashboardLayout(interaction: any): Promise<Response> 
   return reply(`✅ Updated layout: ${Object.keys(patch).filter((k) => k !== "guild_id" && k !== "updated_at").join(", ")}.`);
 }
 
-// Reorder picker: ephemeral 2-step select flow. Step 1 lists items, step 2 picks a target position.
-function buildReorderPicker(_guildId: string, kind: "cat" | "info"): Response {
-  // We pass kind in the custom_id; loading the items happens in the component handler
-  // to keep this initial reply tiny & avoid stale state.
-  const placeholder = kind === "cat" ? "Pick a category to move" : "Pick an info button to move";
-  const data = {
-    content: kind === "cat"
-      ? "**Reorder category buttons** — pick one, then choose its new position."
-      : "**Reorder info buttons** — pick one, then choose its new position.",
-    flags: 64,
-    components: [{
-      type: 1,
-      components: [{
-        type: 3,
-        custom_id: `fam:reorder:pick:${kind}`,
-        placeholder,
-        options: [{ label: "Loading…", value: "__none__" }],
-        disabled: true,
-      }],
-    }],
-  };
-  // Replace the disabled placeholder with real items via a fresh build done in the picker handler.
-  // To avoid a roundtrip, we trigger it via a marker custom_id that the component handler expands.
+// Reorder picker: ephemeral 2-step select flow.
+//   Step 1: select which item to move
+//   Step 2: select target position 1..N
+async function buildReorderPicker(guildId: string, kind: "cat" | "info"): Promise<Response> {
+  const sb = adminClient();
+  const items = kind === "cat"
+    ? ((await sb.from("family_categories")
+        .select("id,name,emoji,position").eq("guild_id", guildId)
+        .order("position").order("name")).data ?? []) as Array<{ id: number; name: string; emoji: string | null; position: number }>
+    : ((await sb.from("family_info_messages")
+        .select("id,key,label,emoji,position").eq("guild_id", guildId)
+        .order("position").order("id")).data ?? []) as Array<{ id: number; key: string; label: string; emoji: string | null; position: number }>;
+
+  if (!items.length) {
+    return reply(kind === "cat"
+      ? "No categories to reorder. Add one with `/family_category add`."
+      : "No info buttons to reorder. Add one with `/family_info add`.");
+  }
+
+  const options = items.slice(0, 25).map((it: any, i: number) => ({
+    label: `${i + 1}. ${(it.name ?? it.label).slice(0, 90)}`,
+    description: kind === "cat"
+      ? `pos ${it.position ?? 0}`
+      : `key: ${it.key} · pos ${it.position ?? 0}`,
+    value: String(it.id),
+    emoji: it.emoji ? (function () {
+      const m = /^<(a)?:([A-Za-z0-9_~]+):(\d+)>$/.exec(String(it.emoji).trim());
+      return m ? { name: m[2], id: m[3], animated: !!m[1] } : { name: String(it.emoji).trim() };
+    })() : undefined,
+  }));
+
   return new Response(JSON.stringify({
     type: RESP_CHANNEL_MSG,
     data: {
-      ...data,
+      content: kind === "cat"
+        ? "**Reorder category buttons** — pick one, then choose its new position."
+        : "**Reorder info buttons** — pick one, then choose its new position.",
+      flags: 64,
       components: [{
         type: 1,
         components: [{
-          type: 2, style: 1, label: "Load items", emoji: { name: "🔄" },
-          custom_id: `fam:reorder:load:${kind}`,
+          type: 3,
+          custom_id: `fam:reorder:pick:${kind}`,
+          placeholder: kind === "cat" ? "Pick a category to move" : "Pick an info button to move",
+          options,
         }],
       }],
     },
