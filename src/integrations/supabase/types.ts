@@ -367,6 +367,27 @@ export type Database = {
           },
         ]
       }
+      family_dashboard_layout: {
+        Row: {
+          guild_id: string
+          stats_enabled: boolean
+          stats_position: number
+          updated_at: string
+        }
+        Insert: {
+          guild_id: string
+          stats_enabled?: boolean
+          stats_position?: number
+          updated_at?: string
+        }
+        Update: {
+          guild_id?: string
+          stats_enabled?: boolean
+          stats_position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       family_dashboards: {
         Row: {
           category_emoji: string

@@ -829,11 +829,12 @@ const HELP_SECTIONS: { title: string; lines: string[] }[] = [
   {
     title: "🏛️ Family Dashboard",
     lines: [
-      "`/family_category add|edit|remove|rename|list` — Categories (buttons on dashboard) *(admin)*",
-      "`/family_info add|edit|remove|list` — Custom info buttons (e.g. What is FWA?) *(admin)*",
+      "`/family_category add|edit|remove|rename|reorder|list` — Categories (buttons on dashboard) *(admin)*",
+      "`/family_info add|edit|remove|reorder|list` — Custom info buttons (e.g. What is FWA?) *(admin)*",
       "`/family_clan add|remove|move|list` — Manage clans in categories *(admin)*",
       "`/family_clan_dashboard [channel]` — Post / re-bind the dashboard message *(admin)*",
       "`/family_customize ...` — Title, color, footer, line format, images *(admin)*",
+      "`/family_dashboard_layout stats_position:<n> stats_enabled:<bool>` — Move/hide the 📊 Clan Statistics button *(admin)*",
       "`/embed_editor` — Open the web-based embed builder *(admin)*",
     ],
   },
@@ -1065,6 +1066,7 @@ async function handleFamilyCategory(interaction: any): Promise<Response> {
     const lbl = getOpt(options, "button_label"); if (lbl != null) row.button_label = String(lbl);
     const style = getOpt(options, "button_style"); if (style != null) row.button_style = Number(style);
     const lf = getOpt(options, "line_format"); if (lf != null) row.line_format = String(lf);
+    const pos = getOpt(options, "position"); if (pos != null) row.position = Number(pos);
     const { error } = await sb.from("family_categories").insert(row);
     if (error) return reply(`❌ ${error.message}`);
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
@@ -1106,6 +1108,9 @@ async function handleFamilyCategory(interaction: any): Promise<Response> {
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
     return reply(`✏️ Renamed **${oldName}** → **${newName}**.`);
   }
+  if (sub === "reorder") {
+    return buildReorderPicker(guildId, "cat");
+  }
   return reply("Unknown subcommand.");
 }
 
@@ -1144,6 +1149,7 @@ async function handleFamilyInfo(interaction: any): Promise<Response> {
     }
     const img = getOpt(options, "image_url"); if (img != null) row.image_url = String(img);
     const thumb = getOpt(options, "thumbnail_url"); if (thumb != null) row.thumbnail_url = String(thumb);
+    const pos = getOpt(options, "position"); if (pos != null) row.position = Number(pos);
     const { error } = await sb.from("family_info_messages").insert(row);
     if (error) return reply(`❌ ${error.message}`);
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
@@ -1187,7 +1193,79 @@ async function handleFamilyInfo(interaction: any): Promise<Response> {
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
     return reply(`🗑️ Removed info \`${key}\`.`);
   }
+  if (sub === "reorder") {
+    return buildReorderPicker(guildId, "info");
+  }
   return reply("Unknown subcommand.");
+}
+
+async function handleFamilyDashboardLayout(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_dashboard_layout"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { options } = getSubOptions(interaction.data.options);
+  const patch: Record<string, any> = { guild_id: guildId, updated_at: new Date().toISOString() };
+  const pos = getOpt(options, "stats_position"); if (pos != null) patch.stats_position = Number(pos);
+  const en = getOpt(options, "stats_enabled"); if (en != null) patch.stats_enabled = !!en;
+  if (Object.keys(patch).length <= 2) {
+    const { data } = await sb.from("family_dashboard_layout").select("stats_position,stats_enabled").eq("guild_id", guildId).maybeSingle();
+    return reply(`📋 **Family Dashboard Layout**\n• Stats button position: \`${data?.stats_position ?? 9999}\`\n• Stats button enabled: \`${data?.stats_enabled ?? true}\`\n\nUse \`/family_dashboard_layout stats_position:<n>\` or \`stats_enabled:<true|false>\`.`);
+  }
+  const { error } = await sb.from("family_dashboard_layout").upsert(patch, { onConflict: "guild_id" });
+  if (error) return reply(`❌ ${error.message}`);
+  syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+  return reply(`✅ Updated layout: ${Object.keys(patch).filter((k) => k !== "guild_id" && k !== "updated_at").join(", ")}.`);
+}
+
+// Reorder picker: ephemeral 2-step select flow.
+//   Step 1: select which item to move
+//   Step 2: select target position 1..N
+async function buildReorderPicker(guildId: string, kind: "cat" | "info"): Promise<Response> {
+  const sb = adminClient();
+  const items = kind === "cat"
+    ? ((await sb.from("family_categories")
+        .select("id,name,emoji,position").eq("guild_id", guildId)
+        .order("position").order("name")).data ?? []) as Array<{ id: number; name: string; emoji: string | null; position: number }>
+    : ((await sb.from("family_info_messages")
+        .select("id,key,label,emoji,position").eq("guild_id", guildId)
+        .order("position").order("id")).data ?? []) as Array<{ id: number; key: string; label: string; emoji: string | null; position: number }>;
+
+  if (!items.length) {
+    return reply(kind === "cat"
+      ? "No categories to reorder. Add one with `/family_category add`."
+      : "No info buttons to reorder. Add one with `/family_info add`.");
+  }
+
+  const options = items.slice(0, 25).map((it: any, i: number) => ({
+    label: `${i + 1}. ${(it.name ?? it.label).slice(0, 90)}`,
+    description: kind === "cat"
+      ? `pos ${it.position ?? 0}`
+      : `key: ${it.key} · pos ${it.position ?? 0}`,
+    value: String(it.id),
+    emoji: it.emoji ? (function () {
+      const m = /^<(a)?:([A-Za-z0-9_~]+):(\d+)>$/.exec(String(it.emoji).trim());
+      return m ? { name: m[2], id: m[3], animated: !!m[1] } : { name: String(it.emoji).trim() };
+    })() : undefined,
+  }));
+
+  return new Response(JSON.stringify({
+    type: RESP_CHANNEL_MSG,
+    data: {
+      content: kind === "cat"
+        ? "**Reorder category buttons** — pick one, then choose its new position."
+        : "**Reorder info buttons** — pick one, then choose its new position.",
+      flags: 64,
+      components: [{
+        type: 1,
+        components: [{
+          type: 3,
+          custom_id: `fam:reorder:pick:${kind}`,
+          placeholder: kind === "cat" ? "Pick a category to move" : "Pick an info button to move",
+          options,
+        }],
+      }],
+    },
+  }), { headers: { "Content-Type": "application/json" } });
 }
 
 async function handleFamilyClan(interaction: any): Promise<Response> {
@@ -1607,6 +1685,78 @@ Deno.serve(async (req) => {
         const data = await buildFamilyStatsPayload(guildId);
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
       }
+      // Reorder: step 1 — user picked an item to move; show position picker
+      if (cid.startsWith("fam:reorder:pick:")) {
+        const guildId = interaction.guild_id ?? "";
+        const kind = cid.split(":")[3] as "cat" | "info";
+        const itemId = interaction.data?.values?.[0];
+        const table = kind === "cat" ? "family_categories" : "family_info_messages";
+        const sbR = adminClient();
+        const { data: all } = await sbR.from(table)
+          .select(kind === "cat" ? "id,name,emoji,position" : "id,key,label,emoji,position")
+          .eq("guild_id", guildId)
+          .order("position").order(kind === "cat" ? "name" : "id");
+        const items = (all ?? []) as any[];
+        const picked = items.find((x) => String(x.id) === String(itemId));
+        if (!picked) {
+          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: { content: "Item not found.", components: [], flags: 64 } }), { headers: { "Content-Type": "application/json" } });
+        }
+        const n = items.length;
+        const options = Array.from({ length: Math.min(n, 25) }, (_, i) => ({
+          label: `Position ${i + 1}`,
+          description: items[i] ? `currently: ${(items[i].name ?? items[i].label).slice(0, 80)}` : undefined,
+          value: String(i + 1),
+        }));
+        const pickedLabel = picked.name ?? picked.label;
+        return new Response(JSON.stringify({
+          type: RESP_UPDATE_MESSAGE,
+          data: {
+            content: `Moving **${pickedLabel}** — pick its new position:`,
+            flags: 64,
+            components: [{
+              type: 1,
+              components: [{
+                type: 3,
+                custom_id: `fam:reorder:apply:${kind}:${itemId}`,
+                placeholder: "Choose new position",
+                options,
+              }],
+            }],
+          },
+        }), { headers: { "Content-Type": "application/json" } });
+      }
+      // Reorder: step 2 — apply new position; re-number siblings
+      if (cid.startsWith("fam:reorder:apply:")) {
+        const guildId = interaction.guild_id ?? "";
+        const parts = cid.split(":");
+        const kind = parts[3] as "cat" | "info";
+        const itemId = parts[4];
+        const target = parseInt(interaction.data?.values?.[0] ?? "1", 10);
+        const table = kind === "cat" ? "family_categories" : "family_info_messages";
+        const sbR = adminClient();
+        const { data: all } = await sbR.from(table)
+          .select("id,position").eq("guild_id", guildId)
+          .order("position").order(kind === "cat" ? "name" : "id");
+        const items = (all ?? []) as Array<{ id: number; position: number }>;
+        const fromIdx = items.findIndex((x) => String(x.id) === String(itemId));
+        if (fromIdx < 0) {
+          return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: { content: "Item not found.", components: [], flags: 64 } }), { headers: { "Content-Type": "application/json" } });
+        }
+        const moved = items.splice(fromIdx, 1)[0];
+        const toIdx = Math.max(0, Math.min(items.length, target - 1));
+        items.splice(toIdx, 0, moved);
+        // Re-number sequentially starting at 1
+        for (let i = 0; i < items.length; i++) {
+          if ((items[i].position ?? -1) !== i + 1) {
+            await sbR.from(table).update({ position: i + 1 }).eq("id", items[i].id);
+          }
+        }
+        syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+        return new Response(JSON.stringify({
+          type: RESP_UPDATE_MESSAGE,
+          data: { content: `✅ Moved to position **${toIdx + 1}**. Dashboard refreshing…`, components: [], flags: 64 },
+        }), { headers: { "Content-Type": "application/json" } });
+      }
       if (cid.startsWith("coc:pick:")) {
         // coc:pick:<cmdName>:<targetUserOrEmpty>:<forUserId>
         const parts = cid.split(":");
@@ -1687,6 +1837,7 @@ Deno.serve(async (req) => {
         case "donation_reset": return await handleDonationReset(interaction);
         case "family_category": return await handleFamilyCategory(interaction);
         case "family_info": return await handleFamilyInfo(interaction);
+        case "family_dashboard_layout": return await handleFamilyDashboardLayout(interaction);
         case "family_clan": return await handleFamilyClan(interaction);
         case "family_clan_dashboard": return await handleFamilyDashboard(interaction);
         case "family_customize": return await handleFamilyCustomize(interaction);

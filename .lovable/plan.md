@@ -1,124 +1,56 @@
-## 1. War TH composition in `/current_war`
+# Dashboard Button Reordering
 
-Add a single-line TH breakdown for each side, under the score row.
+Make every button on the Family Clan Dashboard reorderable: category buttons, custom info buttons, and the Clan Statistics button. Two ways to reorder — Discord slash commands (quick) and drag-and-drop in the web app (visual).
 
-```
-🏠 Us:  TH17×5  TH16×10  TH15×8  TH14×2
-🏠 Opp: TH17×6  TH16×9   TH15×9  TH14×1
-```
+## What you'll get
 
-**Where:** `supabase/functions/_shared/war.ts` — in the function that builds the current war embed (and reused by `/current_war` handler). Pull `townhallLevel` from each side's roster (stored in `wars.raw_roster`), bucket → sort TH desc → format with TH emoji from `th_emojis` table.
+### Discord commands
+- `/family_category reorder` — opens an ordered picker so you can move a category up/down, or set its exact position
+- `/family_category edit … position:<n>` — set position inline when editing
+- `/family_category add … position:<n>` — choose insertion position when adding
+- `/family_info reorder`, `/family_info edit … position:<n>`, `/family_info add … position:<n>` — same for custom info buttons
+- `/family_dashboard_layout stats_position:<n> stats_enabled:<bool>` — control where the Clan Statistics button sits in the global order (or hide it)
 
----
+After any reorder, the dashboard message auto-refreshes.
 
-## 2. Redesigned Family Dashboard
+### Web UI (new "Family Dashboard" page)
+- Single list showing every button in render order (categories, info, stats) with its emoji + label + type badge
+- Drag handles to reorder across the whole list
+- Stats button shown as a draggable pinned row with a visibility toggle
+- "Save order" persists positions; "Preview" re-renders the dashboard in Discord
 
-Replace the current per-category select-menu dashboard with a **button-based** layout matching the reference.
+## Technical details
 
-### Dashboard message
+**DB migration**
+- `family_categories.position` and `family_info_messages.position` already exist — reuse them.
+- New table `family_dashboard_layout` (one row per guild): `guild_id pk`, `stats_position int default 9999`, `stats_enabled bool default true`, `updated_at`. Public read, no client writes (edge function uses service role).
+- Helper: when inserting at position N, shift existing rows `position >= N` by +1 (done in edge function, not as a trigger, to keep it scoped per-guild and per-list).
 
-- Embed (configurable via Embed Editor `family_dashboard` slot, already exists) — title, description, image, etc.
-- **Button row(s)**: one button per family category, in `position` order. Discord allows 5 buttons/row → up to 5 rows = 25 categories.
-- Each category gets a configurable **emoji + label + button style** (Primary/Secondary/Success/Danger).
+**Edge function changes** (`supabase/functions/_shared/family.ts`, `discord-interactions/index.ts`, `_shared/commands.ts`, `discord-register-global-commands`)
+- Add `position` option to existing `family_category add/edit` and `family_info add/edit` subcommands.
+- Add `reorder` subcommand to both — responds with an ephemeral string-select of items; selecting an item opens a follow-up select with "Move to position 1…N". Two interactions, no modals.
+- Add `/family_dashboard_layout` command with `stats_position` and `stats_enabled` options.
+- In `buildDashboardPayload`: merge categories + infos into one array, each tagged with its `position`, then splice the stats button at `layout.stats_position` (or append if unset); only emit stats button when `stats_enabled`. Pack into rows of 5 as today.
+- After every reorder mutation, call `syncDashboardMessage(guildId)`.
 
-### New table: `family_category_buttons` (or new columns on `family_categories`)
+**Web UI** (new route `/family-dashboard`, added to `src/components/Layout.tsx` nav)
+- Fetch categories + infos + layout for the configured guild (reuse existing guild selector pattern from other admin pages).
+- Use `@dnd-kit/core` + `@dnd-kit/sortable` (already a common pick; will add via `bun add` if missing) for the unified sortable list.
+- On drop, compute new positions and write via a new edge function `family-dashboard-reorder` (service-role; validates guild admin via Discord token like existing admin endpoints) that updates `position` columns + `family_dashboard_layout`, then calls `syncDashboardMessage`.
 
-Add columns to `family_categories`:
-
-- `emoji text` (e.g. `🏆`, `⚔️`, `👑`)
-- `button_style smallint default 2` (1=Primary 2=Secondary 3=Success 4=Danger)
-- `button_label text` (optional override; defaults to `name`)
-
-### Clicking a category button
-
-Sends an **ephemeral** message containing:
-
-1. A header embed listing all clans in that category (numbered, with names + tags) — uses the same `clan_line_format` per-category override (new optional column on `family_categories.line_format`).
-2. A **select menu** "Select a {category} Clan" with each clan as an option (label = name, description = tag).
-
-### Selecting a clan from the menu
-
-Reuses existing `buildClanDetailEmbed(clanTag, guildId)` — already shows name/tag/level/members/league/links and respects `clan_info` embed template override. This satisfies the "CWL pull from API" requirement (live CoC data, hyperlinked CC + Open in Game).
-
-### New/updated slash commands
-
-- `/family_category add` — add `emoji`, `label`, `style`, `line_format` options
-- `/family_category edit <name>` — change emoji/label/style/line_format/position
-- `/family_category list` — show categories with their button preview info
-
-### Info buttons (`/family_info`)
-
-New table `family_info_messages`:
-
-- `guild_id, key (unique per guild), label, emoji, button_style, title, description, color, image_url, thumbnail_url`
-
-Commands:
-
-- `/family_info add <key> <label> <title> <message>` (+ optional emoji, style, color, image)
-- `/family_info edit <key> ...`
-- `/family_info remove <key>`
-- `/family_info list`
-
-Each info entry becomes an extra button on the dashboard, appended **after** category buttons (still 5/row, up to 25 total including categories). Clicking sends an ephemeral embed with that info content.
-
-### Dashboard build changes
-
-`buildDashboardPayload` (in `_shared/family.ts`):
-
-- Stop pushing one field per category and stop emitting select-menu rows.
-- Instead: keep base embed (template-driven), then build `components[]` from categories + info entries, packed into rows of 5.
-- Interaction handler in `discord-interactions/index.ts`:
-  - `custom_id: fam:cat:{categoryId}` → ephemeral category list + clan select
-  - `custom_id: fam:info:{key}` → ephemeral info embed
-  - Existing `fam:view:{categoryId}` clan-detail flow stays for the per-category select menu.
-
----
-
-## 3. Migrations
-
-```sql
-ALTER TABLE family_categories
-  ADD COLUMN emoji text,
-  ADD COLUMN button_label text,
-  ADD COLUMN button_style smallint NOT NULL DEFAULT 2,
-  ADD COLUMN line_format text;
-
-CREATE TABLE family_info_messages (
-  id bigserial PRIMARY KEY,
-  guild_id text NOT NULL,
-  key text NOT NULL,
-  label text NOT NULL,
-  emoji text,
-  button_style smallint NOT NULL DEFAULT 2,
-  title text,
-  description text,
-  color integer,
-  image_url text,
-  thumbnail_url text,
-  position integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (guild_id, key)
-);
-ALTER TABLE family_info_messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "public read family_info_messages"
-  ON family_info_messages FOR SELECT USING (true);
-```
-
----
+**Help text**
+- Update `/help` output to list the new `reorder` subcommands and `/family_dashboard_layout`.
 
 ## Files touched
 
-- **New migration** for the two schema changes above
-- `supabase/functions/_shared/commands.ts` — add `family_info`, extend `family_category` subcommand options
-- `supabase/functions/_shared/family.ts` — new payload builder (buttons, packed rows), helpers for info messages
-- `supabase/functions/_shared/war.ts` — TH composition line in current-war embed
-- `supabase/functions/discord-interactions/index.ts` — handlers for `family_info` subcommands, `fam:cat:*` and `fam:info:*` button interactions, expanded `family_category` options
-- `supabase/functions/discord-register-global-commands` redeploy
-
----
+- `supabase/migrations/<ts>_family_dashboard_layout.sql` (new)
+- `supabase/functions/_shared/family.ts`
+- `supabase/functions/_shared/commands.ts`
+- `supabase/functions/discord-interactions/index.ts`
+- `supabase/functions/discord-register-global-commands/index.ts`
+- `supabase/functions/family-dashboard-reorder/index.ts` (new)
+- `src/pages/FamilyDashboard.tsx` (new) + route in `src/App.tsx` + nav entry in `src/components/Layout.tsx`
 
 ## Out of scope
-
-- Web Embed Editor UI changes for category emoji/style (admins set via slash commands; can be added later) Modify that also as per it
-- "Clan Statistics" button from the reference screenshot (donations + active/inactive counts) — confirm if you want this included now; if yes I'll add it as a separate button on the dashboard that aggregates from `donation_snapshots` + `player_activity_events`. Make it Yes I wanted this
+- Reordering clans **within** a category (only buttons, per your scope).
+- Changing button colors/emojis from the web UI (still done via slash commands).
