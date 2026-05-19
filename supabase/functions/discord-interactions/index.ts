@@ -1107,6 +1107,9 @@ async function handleFamilyCategory(interaction: any): Promise<Response> {
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
     return reply(`✏️ Renamed **${oldName}** → **${newName}**.`);
   }
+  if (sub === "reorder") {
+    return buildReorderPicker(guildId, "cat");
+  }
   return reply("Unknown subcommand.");
 }
 
