@@ -1192,7 +1192,66 @@ async function handleFamilyInfo(interaction: any): Promise<Response> {
     syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
     return reply(`🗑️ Removed info \`${key}\`.`);
   }
+  if (sub === "reorder") {
+    return buildReorderPicker(guildId, "info");
+  }
   return reply("Unknown subcommand.");
+}
+
+async function handleFamilyDashboardLayout(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "family_dashboard_layout"); if (denied) return denied;
+  const guildId = interaction.guild_id;
+  const sb = adminClient();
+  const { options } = getSubOptions(interaction.data.options);
+  const patch: Record<string, any> = { guild_id: guildId, updated_at: new Date().toISOString() };
+  const pos = getOpt(options, "stats_position"); if (pos != null) patch.stats_position = Number(pos);
+  const en = getOpt(options, "stats_enabled"); if (en != null) patch.stats_enabled = !!en;
+  if (Object.keys(patch).length <= 2) {
+    const { data } = await sb.from("family_dashboard_layout").select("stats_position,stats_enabled").eq("guild_id", guildId).maybeSingle();
+    return reply(`📋 **Family Dashboard Layout**\n• Stats button position: \`${data?.stats_position ?? 9999}\`\n• Stats button enabled: \`${data?.stats_enabled ?? true}\`\n\nUse \`/family_dashboard_layout stats_position:<n>\` or \`stats_enabled:<true|false>\`.`);
+  }
+  const { error } = await sb.from("family_dashboard_layout").upsert(patch, { onConflict: "guild_id" });
+  if (error) return reply(`❌ ${error.message}`);
+  syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
+  return reply(`✅ Updated layout: ${Object.keys(patch).filter((k) => k !== "guild_id" && k !== "updated_at").join(", ")}.`);
+}
+
+// Reorder picker: ephemeral 2-step select flow. Step 1 lists items, step 2 picks a target position.
+function buildReorderPicker(_guildId: string, kind: "cat" | "info"): Response {
+  // We pass kind in the custom_id; loading the items happens in the component handler
+  // to keep this initial reply tiny & avoid stale state.
+  const placeholder = kind === "cat" ? "Pick a category to move" : "Pick an info button to move";
+  const data = {
+    content: kind === "cat"
+      ? "**Reorder category buttons** — pick one, then choose its new position."
+      : "**Reorder info buttons** — pick one, then choose its new position.",
+    flags: 64,
+    components: [{
+      type: 1,
+      components: [{
+        type: 3,
+        custom_id: `fam:reorder:pick:${kind}`,
+        placeholder,
+        options: [{ label: "Loading…", value: "__none__" }],
+        disabled: true,
+      }],
+    }],
+  };
+  // Replace the disabled placeholder with real items via a fresh build done in the picker handler.
+  // To avoid a roundtrip, we trigger it via a marker custom_id that the component handler expands.
+  return new Response(JSON.stringify({
+    type: RESP_CHANNEL_MSG,
+    data: {
+      ...data,
+      components: [{
+        type: 1,
+        components: [{
+          type: 2, style: 1, label: "Load items", emoji: { name: "🔄" },
+          custom_id: `fam:reorder:load:${kind}`,
+        }],
+      }],
+    },
+  }), { headers: { "Content-Type": "application/json" } });
 }
 
 async function handleFamilyClan(interaction: any): Promise<Response> {
