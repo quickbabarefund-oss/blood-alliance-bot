@@ -319,8 +319,9 @@ export const COMMANDS: any[] = [
     default_member_permissions: ADMIN_ONLY,
     options: [
       { type: SUB, name: "add", description: "Add a new info button + message", options: [
-        { type: STRING, name: "key", description: "Unique key (e.g. what_is_fwa)", required: true },
-        { type: STRING, name: "label", description: "Button label (e.g. What is FWA?)", required: true },
+        { type: STRING, name: "name", description: "Friendly name / button label (e.g. What is FWA?)", required: true },
+        { type: STRING, name: "key", description: "Optional unique key (auto-generated from name if omitted)" },
+        { type: STRING, name: "label", description: "Override button label (defaults to name)" },
         { type: STRING, name: "title", description: "Embed title", required: true },
         { type: STRING, name: "message", description: "Embed body (\\n for new lines)", required: true },
         { type: STRING, name: "emoji", description: "Button emoji (e.g. ❗ 🎓)" },
