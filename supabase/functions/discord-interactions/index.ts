@@ -1710,38 +1710,48 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ type: RESP_CHANNEL_MSG, data }), { headers: { "Content-Type": "application/json" } });
       }
       // Reorder: step 1 — user picked an item to move; show position picker
+      // Reorder step 1 — picked a button; show unified position picker (cats + infos + stats).
       if (cid.startsWith("fam:reorder:pick:")) {
         const guildId = interaction.guild_id ?? "";
-        const kind = cid.split(":")[3] as "cat" | "info";
-        const itemId = interaction.data?.values?.[0];
-        const table = kind === "cat" ? "family_categories" : "family_info_messages";
+        const pickedValue = String(interaction.data?.values?.[0] ?? "");
         const sbR = adminClient();
-        const { data: all } = await sbR.from(table)
-          .select(kind === "cat" ? "id,name,emoji,position" : "id,key,label,emoji,position")
-          .eq("guild_id", guildId)
-          .order("position").order(kind === "cat" ? "name" : "id");
-        const items = (all ?? []) as any[];
-        const picked = items.find((x) => String(x.id) === String(itemId));
+        const [cats, infos, layout] = await Promise.all([
+          sbR.from("family_categories").select("id,name,emoji,position").eq("guild_id", guildId).order("position").order("name")
+            .then((r) => (r.data ?? []) as any[]),
+          sbR.from("family_info_messages").select("id,key,label,emoji,position").eq("guild_id", guildId).order("position").order("id")
+            .then((r) => (r.data ?? []) as any[]),
+          sbR.from("family_dashboard_layout").select("stats_position,stats_enabled").eq("guild_id", guildId).maybeSingle()
+            .then((r) => r.data as { stats_position: number; stats_enabled: boolean } | null),
+        ]);
+        type U = { value: string; label: string; pos: number };
+        const merged: U[] = [
+          ...cats.map((c) => ({ value: `cat:${c.id}`, label: c.name as string, pos: c.position ?? 0 })),
+          ...infos.map((i) => ({ value: `info:${i.id}`, label: (i.label || i.key) as string, pos: i.position ?? 0 })),
+        ];
+        if (!layout || layout.stats_enabled !== false) {
+          merged.push({ value: "stats", label: "Clan Statistics", pos: layout?.stats_position ?? 9999 });
+        }
+        merged.sort((a, b) => a.pos - b.pos);
+        const picked = merged.find((x) => x.value === pickedValue);
         if (!picked) {
           return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: { content: "Item not found.", components: [], flags: 64 } }), { headers: { "Content-Type": "application/json" } });
         }
-        const n = items.length;
+        const n = merged.length;
         const options = Array.from({ length: Math.min(n, 25) }, (_, i) => ({
           label: `Position ${i + 1}`,
-          description: items[i] ? `currently: ${(items[i].name ?? items[i].label).slice(0, 80)}` : undefined,
+          description: merged[i] ? `currently: ${merged[i].label.slice(0, 80)}` : undefined,
           value: String(i + 1),
         }));
-        const pickedLabel = picked.name ?? picked.label;
         return new Response(JSON.stringify({
           type: RESP_UPDATE_MESSAGE,
           data: {
-            content: `Moving **${pickedLabel}** — pick its new position:`,
+            content: `Moving **${picked.label}** — pick its new position in the unified button order:`,
             flags: 64,
             components: [{
               type: 1,
               components: [{
                 type: 3,
-                custom_id: `fam:reorder:apply:${kind}:${itemId}`,
+                custom_id: `fam:reorder:apply:${pickedValue}`,
                 placeholder: "Choose new position",
                 options,
               }],
@@ -1749,36 +1759,54 @@ Deno.serve(async (req) => {
           },
         }), { headers: { "Content-Type": "application/json" } });
       }
-      // Reorder: step 2 — apply new position; re-number siblings
+      // Reorder step 2 — apply new global position; renumber ALL items 1..N across cats+infos+stats.
       if (cid.startsWith("fam:reorder:apply:")) {
         const guildId = interaction.guild_id ?? "";
-        const parts = cid.split(":");
-        const kind = parts[3] as "cat" | "info";
-        const itemId = parts[4];
+        const pickedValue = cid.slice("fam:reorder:apply:".length); // "cat:123" | "info:45" | "stats"
         const target = parseInt(interaction.data?.values?.[0] ?? "1", 10);
-        const table = kind === "cat" ? "family_categories" : "family_info_messages";
         const sbR = adminClient();
-        const { data: all } = await sbR.from(table)
-          .select("id,position").eq("guild_id", guildId)
-          .order("position").order(kind === "cat" ? "name" : "id");
-        const items = (all ?? []) as Array<{ id: number; position: number }>;
-        const fromIdx = items.findIndex((x) => String(x.id) === String(itemId));
+        const [cats, infos, layout] = await Promise.all([
+          sbR.from("family_categories").select("id,position").eq("guild_id", guildId).order("position").order("name")
+            .then((r) => (r.data ?? []) as Array<{ id: number; position: number }>),
+          sbR.from("family_info_messages").select("id,position").eq("guild_id", guildId).order("position").order("id")
+            .then((r) => (r.data ?? []) as Array<{ id: number; position: number }>),
+          sbR.from("family_dashboard_layout").select("stats_position,stats_enabled").eq("guild_id", guildId).maybeSingle()
+            .then((r) => r.data as { stats_position: number; stats_enabled: boolean } | null),
+        ]);
+        type M = { value: string; pos: number };
+        const merged: M[] = [
+          ...cats.map((c) => ({ value: `cat:${c.id}`, pos: c.position ?? 0 })),
+          ...infos.map((i) => ({ value: `info:${i.id}`, pos: i.position ?? 0 })),
+        ];
+        const statsIncluded = !layout || layout.stats_enabled !== false;
+        if (statsIncluded) merged.push({ value: "stats", pos: layout?.stats_position ?? 9999 });
+        merged.sort((a, b) => a.pos - b.pos);
+        const fromIdx = merged.findIndex((x) => x.value === pickedValue);
         if (fromIdx < 0) {
           return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: { content: "Item not found.", components: [], flags: 64 } }), { headers: { "Content-Type": "application/json" } });
         }
-        const moved = items.splice(fromIdx, 1)[0];
-        const toIdx = Math.max(0, Math.min(items.length, target - 1));
-        items.splice(toIdx, 0, moved);
-        // Re-number sequentially starting at 1
-        for (let i = 0; i < items.length; i++) {
-          if ((items[i].position ?? -1) !== i + 1) {
-            await sbR.from(table).update({ position: i + 1 }).eq("id", items[i].id);
+        const [moved] = merged.splice(fromIdx, 1);
+        const toIdx = Math.max(0, Math.min(merged.length, target - 1));
+        merged.splice(toIdx, 0, moved);
+        // Renumber across both tables and the stats layout row.
+        for (let i = 0; i < merged.length; i++) {
+          const newPos = i + 1;
+          const v = merged[i].value;
+          if (v === "stats") {
+            await sbR.from("family_dashboard_layout").upsert(
+              { guild_id: guildId, stats_position: newPos, stats_enabled: layout?.stats_enabled ?? true, updated_at: new Date().toISOString() },
+              { onConflict: "guild_id" },
+            );
+          } else {
+            const [t, idStr] = v.split(":");
+            const table = t === "cat" ? "family_categories" : "family_info_messages";
+            await sbR.from(table).update({ position: newPos }).eq("id", Number(idStr)).eq("guild_id", guildId);
           }
         }
         syncDashboardMessage(guildId).catch((e) => console.error("dashboard sync", e));
         return new Response(JSON.stringify({
           type: RESP_UPDATE_MESSAGE,
-          data: { content: `✅ Moved to position **${toIdx + 1}**. Dashboard refreshing…`, components: [], flags: 64 },
+          data: { content: `✅ Moved to position **${toIdx + 1}** in the unified order. Dashboard refreshing…`, components: [], flags: 64 },
         }), { headers: { "Content-Type": "application/json" } });
       }
       if (cid.startsWith("coc:pick:")) {
