@@ -1130,11 +1130,24 @@ async function handleFamilyInfo(interaction: any): Promise<Response> {
   }
 
   if (sub === "add") {
-    const key = String(getOpt(options, "key") ?? "").trim();
-    const label = String(getOpt(options, "label") ?? "").trim();
+    const name = String(getOpt(options, "name") ?? "").trim();
+    let key = String(getOpt(options, "key") ?? "").trim();
+    const labelOverride = String(getOpt(options, "label") ?? "").trim();
+    const label = labelOverride || name;
     const title = String(getOpt(options, "title") ?? "").trim();
     const message = String(getOpt(options, "message") ?? "").trim();
-    if (!key || !label || !title || !message) return reply("`key`, `label`, `title`, `message` are required.");
+    if (!name || !title || !message) return reply("`name`, `title`, `message` are required.");
+    if (!key) {
+      // Auto-slug from name
+      const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "info";
+      key = base;
+      // Ensure uniqueness within guild
+      const { data: existing } = await sb.from("family_info_messages")
+        .select("key").eq("guild_id", guildId).like("key", `${base}%`);
+      const taken = new Set((existing ?? []).map((r: any) => r.key));
+      let n = 2;
+      while (taken.has(key)) { key = `${base}_${n++}`; }
+    }
     const row: Record<string, any> = {
       guild_id: guildId, key, label, title,
       description: message.replace(/\\n/g, "\n"),
