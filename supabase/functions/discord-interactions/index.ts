@@ -1230,31 +1230,44 @@ async function handleFamilyDashboardLayout(interaction: any): Promise<Response> 
   return reply(`✅ Updated layout: ${Object.keys(patch).filter((k) => k !== "guild_id" && k !== "updated_at").join(", ")}.`);
 }
 
-// Reorder picker: ephemeral 2-step select flow.
-//   Step 1: select which item to move
-//   Step 2: select target position 1..N
+// Reorder picker: ephemeral 2-step select flow over a UNIFIED list of all
+// dashboard buttons (category buttons + info buttons + Clan Statistics).
+// Positions are shared across categories + infos so the visual order on the
+// dashboard matches what the admin picks here.
+//   Step 1: select which button to move
+//   Step 2: select target absolute position 1..N
+// `kind` is kept only for the entry-point message ("category" vs "info" wording).
 async function buildReorderPicker(guildId: string, kind: "cat" | "info"): Promise<Response> {
   const sb = adminClient();
-  const items = kind === "cat"
-    ? ((await sb.from("family_categories")
-        .select("id,name,emoji,position").eq("guild_id", guildId)
-        .order("position").order("name")).data ?? []) as Array<{ id: number; name: string; emoji: string | null; position: number }>
-    : ((await sb.from("family_info_messages")
-        .select("id,key,label,emoji,position").eq("guild_id", guildId)
-        .order("position").order("id")).data ?? []) as Array<{ id: number; key: string; label: string; emoji: string | null; position: number }>;
+  const [cats, infos, layout] = await Promise.all([
+    sb.from("family_categories").select("id,name,emoji,position").eq("guild_id", guildId).order("position").order("name")
+      .then((r) => (r.data ?? []) as Array<{ id: number; name: string; emoji: string | null; position: number }>),
+    sb.from("family_info_messages").select("id,key,label,emoji,position").eq("guild_id", guildId).order("position").order("id")
+      .then((r) => (r.data ?? []) as Array<{ id: number; key: string; label: string; emoji: string | null; position: number }>),
+    sb.from("family_dashboard_layout").select("stats_position,stats_enabled").eq("guild_id", guildId).maybeSingle()
+      .then((r) => r.data as { stats_position: number; stats_enabled: boolean } | null),
+  ]);
 
-  if (!items.length) {
+  type Item = { value: string; label: string; emoji: string | null; pos: number; kind: "cat" | "info" | "stats" };
+  const merged: Item[] = [
+    ...cats.map((c) => ({ value: `cat:${c.id}`, label: c.name, emoji: c.emoji, pos: c.position ?? 0, kind: "cat" as const })),
+    ...infos.map((i) => ({ value: `info:${i.id}`, label: i.label || i.key, emoji: i.emoji, pos: i.position ?? 0, kind: "info" as const })),
+  ];
+  if (!layout || layout.stats_enabled !== false) {
+    merged.push({ value: "stats", label: "Clan Statistics", emoji: "📊", pos: layout?.stats_position ?? 9999, kind: "stats" });
+  }
+  merged.sort((a, b) => a.pos - b.pos);
+
+  if (!merged.length) {
     return reply(kind === "cat"
       ? "No categories to reorder. Add one with `/family_category add`."
       : "No info buttons to reorder. Add one with `/family_info add`.");
   }
 
-  const options = items.slice(0, 25).map((it: any, i: number) => ({
-    label: `${i + 1}. ${(it.name ?? it.label).slice(0, 90)}`,
-    description: kind === "cat"
-      ? `pos ${it.position ?? 0}`
-      : `key: ${it.key} · pos ${it.position ?? 0}`,
-    value: String(it.id),
+  const options = merged.slice(0, 25).map((it, i) => ({
+    label: `${i + 1}. ${it.label.slice(0, 90)}`,
+    description: `${it.kind === "cat" ? "Category" : it.kind === "info" ? "Info" : "Stats"} button`,
+    value: it.value,
     emoji: it.emoji ? (function () {
       const m = /^<(a)?:([A-Za-z0-9_~]+):(\d+)>$/.exec(String(it.emoji).trim());
       return m ? { name: m[2], id: m[3], animated: !!m[1] } : { name: String(it.emoji).trim() };
@@ -1264,16 +1277,14 @@ async function buildReorderPicker(guildId: string, kind: "cat" | "info"): Promis
   return new Response(JSON.stringify({
     type: RESP_CHANNEL_MSG,
     data: {
-      content: kind === "cat"
-        ? "**Reorder category buttons** — pick one, then choose its new position."
-        : "**Reorder info buttons** — pick one, then choose its new position.",
+      content: "**Reorder dashboard buttons** — pick any button (category / info / stats), then choose its new position. Order is shared across all button types.",
       flags: 64,
       components: [{
         type: 1,
         components: [{
           type: 3,
-          custom_id: `fam:reorder:pick:${kind}`,
-          placeholder: kind === "cat" ? "Pick a category to move" : "Pick an info button to move",
+          custom_id: `fam:reorder:pick:any`,
+          placeholder: "Pick a button to move",
           options,
         }],
       }],
