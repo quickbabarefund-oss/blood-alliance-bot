@@ -14,7 +14,7 @@ import { evaluateRules, buildResultEmbeds, parseCocTime, type CurrentWar } from 
 import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, loadFamily, refreshClanName, buildCategoryListPayload, buildInfoPayload, buildFamilyStatsPayload } from "../_shared/family.ts";
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
-  buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks,
+  buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks, resolveLinksForTags,
 } from "../_shared/coc_commands.ts";
 import { buildPlayerActivity, buildPlayerJoins } from "../_shared/player_activity.ts";
 
