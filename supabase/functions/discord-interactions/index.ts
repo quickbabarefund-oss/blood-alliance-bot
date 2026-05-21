@@ -1568,6 +1568,97 @@ async function handleEmbedEditor(interaction: any): Promise<Response> {
   }, true);
 }
 
+// /discord_link — shows an ephemeral clan multi-select; component handler fans out per clan.
+async function handleDiscordLink(interaction: any): Promise<Response> {
+  const guildId = interaction.guild_id ?? "";
+  const sb = adminClient();
+  // Prefer family_clans (curated dashboard set); fall back to tracked `clans`.
+  const { data: famClans } = await sb.from("family_clans")
+    .select("clan_tag,clan_name,position").eq("guild_id", guildId).order("position");
+  let pool: Array<{ tag: string; name: string }> = (famClans ?? []).map((c: any) => ({
+    tag: c.clan_tag, name: c.clan_name || c.clan_tag,
+  }));
+  if (!pool.length) {
+    const { data: tracked } = await sb.from("clans").select("tag,name").eq("guild_id", guildId).eq("active", true).order("name");
+    pool = (tracked ?? []).map((c: any) => ({ tag: c.tag, name: c.name || c.tag }));
+  }
+  if (!pool.length) return reply("No clans registered in this server. Use `/clan add` or `/family_clan add` first.");
+
+  // De-dupe by tag, cap at 25 (Discord max options)
+  const seen = new Set<string>();
+  const options = pool.filter((c) => { if (seen.has(c.tag)) return false; seen.add(c.tag); return true; })
+    .slice(0, 25)
+    .map((c) => ({ label: `${c.name} (${c.tag})`.slice(0, 100), value: c.tag }));
+
+  return new Response(JSON.stringify({
+    type: RESP_CHANNEL_MSG,
+    data: {
+      content: "Select clan(s) to show Discord links for their current in-game members:",
+      flags: 64,
+      components: [{
+        type: 1,
+        components: [{
+          type: 3,
+          custom_id: "disclink:pick",
+          placeholder: "Select Clan(s)",
+          min_values: 1,
+          max_values: Math.min(options.length, 25),
+          options,
+        }],
+      }],
+    },
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
+// Build one embed per clan listing each member with their linked Discord user (or ❌).
+async function buildDiscordLinkEmbeds(guildId: string, clanTags: string[]): Promise<any[]> {
+  const { fetchClan } = await import("../_shared/coc.ts");
+  const embeds: any[] = [];
+  for (const tag of clanTags.slice(0, 10)) {
+    try {
+      const clan: any = await fetchClan(tag);
+      const members: any[] = clan?.memberList ?? [];
+      if (!members.length) {
+        embeds.push({ title: `${clan?.name ?? tag} (${tag})`, description: "_No members found._", color: COLOR_BLURPLE });
+        continue;
+      }
+      const links = await resolveLinksForTags(members.map((m) => m.tag));
+      const linkedCount = members.filter((m) => links[normalizeTag(m.tag)]).length;
+      const lines = members.map((m) => {
+        const uid = links[normalizeTag(m.tag)];
+        const name = String(m.name ?? "").slice(0, 24).padEnd(24, " ");
+        return uid
+          ? `\`✅ ${name}\` <@${uid}>`
+          : `\`❌ ${name}\` _not linked_`;
+      });
+      // Split into chunks under 4096 chars
+      const chunks: string[] = [];
+      let buf = "";
+      for (const ln of lines) {
+        if ((buf + "\n" + ln).length > 3800) { chunks.push(buf); buf = ln; }
+        else { buf = buf ? `${buf}\n${ln}` : ln; }
+      }
+      if (buf) chunks.push(buf);
+      chunks.forEach((desc, i) => {
+        embeds.push({
+          title: i === 0 ? `${clan?.name ?? tag} Discord Links` : `${clan?.name ?? tag} Discord Links (cont.)`,
+          description: desc,
+          color: COLOR_BLURPLE,
+          thumbnail: i === 0 && clan?.badgeUrls?.small ? { url: clan.badgeUrls.small } : undefined,
+          footer: i === chunks.length - 1
+            ? { text: `${linkedCount}/${members.length} linked · ${tag}` }
+            : undefined,
+        });
+      });
+    } catch (e) {
+      embeds.push({ title: `⚠️ ${tag}`, description: `Lookup failed: ${e instanceof Error ? e.message : String(e)}`, color: COLOR_RED });
+    }
+  }
+  return embeds;
+}
+
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("ok");
