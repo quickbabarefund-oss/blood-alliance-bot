@@ -36,6 +36,48 @@ export async function fetchLiveUserLinks(userId: string): Promise<Array<{ tag: s
   return (data ?? []).map((r: any) => ({ tag: normalizeTag(r.player_tag) }));
 }
 
+// Resolve Discord user_id for a list of CoC player tags.
+// 1) Reads cached `coc_links` rows.
+// 2) For tags missing from cache, live-queries the CC proxy and upserts results.
+// Returns a map: { "#PLAYER": "discord_user_id", ... } (omits unlinked tags).
+export async function resolveLinksForTags(tags: string[]): Promise<Record<string, string>> {
+  if (!tags?.length) return {};
+  const sb = adminClient();
+  const norm = Array.from(new Set(tags.map(normalizeTag)));
+  const out: Record<string, string> = {};
+  const { data } = await sb.from("coc_links").select("player_tag,user_id").in("player_tag", norm);
+  for (const r of (data ?? []) as { player_tag: string; user_id: string }[]) {
+    if (r.user_id) out[r.player_tag] = r.user_id;
+  }
+  const missing = norm.filter((t) => !out[t]);
+  if (!missing.length) return out;
+
+  const upserts: Array<{ player_tag: string; user_id: string; refreshed_at: string }> = [];
+  const CONCURRENCY = 6;
+  let idx = 0;
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, async () => {
+    while (idx < missing.length) {
+      const t = missing[idx++];
+      try {
+        const res: any = await postCoc({ action: "get", type: "player", filters: { tag: t } });
+        const items: any[] = Array.isArray(res) ? res : (res?.items ?? res?.links ?? (res ? [res] : []));
+        for (const it of items) {
+          const uid = it?.user_id ?? it?.userId ?? it?.discord_id;
+          if (uid) {
+            out[t] = String(uid);
+            upserts.push({ player_tag: t, user_id: String(uid), refreshed_at: new Date().toISOString() });
+            break;
+          }
+        }
+      } catch (_e) { /* per-tag failure ignored */ }
+    }
+  }));
+  if (upserts.length) {
+    try { await sb.from("coc_links").upsert(upserts); } catch (e) { console.error("coc_links upsert", e); }
+  }
+  return out;
+}
+
 // Resolve a tag from explicit arg, or from the user's links (live from proxy).
 async function resolveTag(opts: {
   explicit?: string;

@@ -496,4 +496,8 @@ export const COMMANDS: any[] = [
       { type: USER,   name: "user", description: "Discord user (uses their linked player tag)" },
     ],
   },
+  {
+    name: "discord_link",
+    description: "Show Discord links for clan members — pick clan(s) from a menu",
+  },
 ];

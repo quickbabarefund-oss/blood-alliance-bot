@@ -180,13 +180,8 @@ export async function buildReminderPayload(opts: {
   const maxAttacks = teamSize * 2;
 
   const tags = members.map((m) => m.tag);
-  const links: Record<string, string> = {};
-  if (tags.length) {
-    const { data } = await sb.from("coc_links").select("player_tag,user_id").in("player_tag", tags);
-    for (const r of (data ?? []) as { player_tag: string; user_id: string }[]) {
-      links[r.player_tag] = r.user_id;
-    }
-  }
+  const { resolveLinksForTags } = await import("./coc_commands.ts");
+  const links = await resolveLinksForTags(tags);
 
   let usedAttacks = 0;
   let starsEarned = 0;
