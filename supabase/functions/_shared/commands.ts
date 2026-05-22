@@ -320,10 +320,10 @@ export const COMMANDS: any[] = [
     options: [
       { type: SUB, name: "add", description: "Add a new info button + message", options: [
         { type: STRING, name: "name", description: "Friendly name / button label (e.g. What is FWA?)", required: true },
-        { type: STRING, name: "key", description: "Optional unique key (auto-generated from name if omitted)" },
-        { type: STRING, name: "label", description: "Override button label (defaults to name)" },
         { type: STRING, name: "title", description: "Embed title", required: true },
         { type: STRING, name: "message", description: "Embed body (\\n for new lines)", required: true },
+        { type: STRING, name: "key", description: "Optional unique key (auto-generated from name if omitted)" },
+        { type: STRING, name: "label", description: "Override button label (defaults to name)" },
         { type: STRING, name: "emoji", description: "Button emoji (e.g. ❗ 🎓)" },
         { type: INTEGER, name: "button_style", description: "Button color", choices: [
           { name: "Blurple (Primary)", value: 1 },
