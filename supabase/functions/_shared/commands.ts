@@ -500,4 +500,11 @@ export const COMMANDS: any[] = [
     name: "discord_link",
     description: "Show Discord links for clan members — pick clan(s) from a menu",
   },
+  {
+    name: "myr",
+    description: "Show CWL registration details for you or another user",
+    options: [
+      { type: USER, name: "user", description: "Discord user (defaults to you)" },
+    ],
+  },
 ];
