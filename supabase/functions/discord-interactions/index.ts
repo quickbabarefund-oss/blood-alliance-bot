@@ -1798,6 +1798,10 @@ async function handleMyr(interaction: any): Promise<Response> {
 }
 
 
+Deno.serve(async (req) => {
+
+
+
 
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("ok");
