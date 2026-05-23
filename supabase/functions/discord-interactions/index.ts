@@ -2155,6 +2155,7 @@ Deno.serve(async (req) => {
         case "family_customize": return await handleFamilyCustomize(interaction);
         case "embed_editor": return await handleEmbedEditor(interaction);
         case "discord_link": return await handleDiscordLink(interaction);
+        case "myr": return await handleMyr(interaction);
         case "help": return handleHelp(interaction);
         case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
         case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
