@@ -2109,6 +2109,49 @@ Deno.serve(async (req) => {
         })();
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
+      // /myr — user picked an account from the select menu
+      if (cid.startsWith("myr:pick:")) {
+        const val: string = interaction.data?.values?.[0] ?? "";
+        const [pickedUserId, idxStr] = val.split(":");
+        const idx = parseInt(idxStr ?? "", 10);
+        if (!pickedUserId || !Number.isFinite(idx)) {
+          return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+        }
+        const appId = interaction.application_id;
+        const token = interaction.token;
+        (async () => {
+          try {
+            const data = await fetchMyrData(pickedUserId);
+            const acc = data?.accounts?.[idx];
+            if (!acc) {
+              await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: "❌ Account not found.", flags: 64 }),
+              });
+              return;
+            }
+            const resolvedUser = interaction.message?.interaction?.user
+              ?? interaction.member?.user ?? interaction.user;
+            const avatar = avatarUrlFor(pickedUserId, resolvedUser?.id === pickedUserId ? resolvedUser?.avatar : undefined);
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                embeds: [myrAccountDetailEmbed(acc, avatar)],
+                components: [myrAccountButtonRow(acc)],
+                flags: 64,
+                allowed_mentions: { parse: [] },
+              }),
+            });
+          } catch (e) {
+            console.error("myr pick failed", e);
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
+            }).catch(() => {});
+          }
+        })();
+        return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
       console.error("component handler error", e);
