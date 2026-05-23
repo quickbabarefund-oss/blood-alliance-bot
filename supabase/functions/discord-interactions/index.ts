@@ -1658,8 +1658,151 @@ async function buildDiscordLinkEmbeds(guildId: string, clanTags: string[]): Prom
 }
 
 
+// ============================================================
+// /myr — CWL "My Registration" lookup via external CC endpoint
+// ============================================================
+const MYR_API = "https://zvbtdnywdmfffxvxgzso.supabase.co/functions/v1/cwl-player-info";
+
+async function fetchMyrData(discordUserId: string): Promise<any | null> {
+  try {
+    const r = await fetch(`${MYR_API}?discord_user_id=${encodeURIComponent(discordUserId)}`);
+    if (!r.ok) { console.error("myr fetch", r.status, await r.text().catch(() => "")); return null; }
+    return await r.json();
+  } catch (e) { console.error("myr fetch err", e); return null; }
+}
+
+function myrAccountDetailEmbed(acc: any, avatarUrl: string | undefined): any {
+  const tagClean = String(acc?.assigned_clan_tag ?? "").replace(/^#/, "");
+  const link = `https://link.clashofclans.com/en/?action=OpenClanProfile&tag=%23${tagClean}`;
+  const lines = [
+    `# [Deep Look Registration](${link})`,
+    ``,
+    `- ➡️ Player Name : ${acc?.player_name ?? "—"}`,
+    `- ➡️ Player Tag : ${acc?.player_tag ?? "—"}`,
+    `- ➡️ Town Hall : ${acc?.town_hall ?? "—"}`,
+    `- ➡️ Play Style : ${acc?.registration_type ?? "—"}`,
+    `- ➡️ Assigned Clan : ${acc?.assigned_clan_name ?? "—"}`,
+    `- ➡️ Assigned Tag : ${acc?.assigned_clan_tag ?? "—"}`,
+    `- ➡️ Clan League : ${acc?.assigned_clan_cwl_league ?? "—"}`,
+    `- ➡️ In Assigned Clan : ${acc?.is_in_assigned_clan ?? "—"}`,
+    `- ➡️ Pending CWL Attack : ${acc?.pending_war_attacks ?? "—"}`,
+    `- ➡️ Performance Score : ${acc?.performance_score ?? "—"}`,
+    `- ➡️ War Weight : ${acc?.war_weight ?? "—"} ${acc?.war_weight_status ?? ""}`.trimEnd(),
+  ];
+  return {
+    color: 0xFFFF00,
+    description: lines.join("\n"),
+    thumbnail: avatarUrl ? { url: avatarUrl } : undefined,
+  };
+}
+
+function myrAccountButtonRow(acc: any): any {
+  const tagClean = String(acc?.assigned_clan_tag ?? "").replace(/^#/, "");
+  const link = `https://link.clashofclans.com/en/?action=OpenClanProfile&tag=%23${tagClean}`;
+  return {
+    type: 1,
+    components: [{
+      type: 2,
+      style: 5, // link
+      url: link,
+      label: `🌐 View ${acc?.assigned_clan_tag ?? "Clan"} Profile`.slice(0, 80),
+    }],
+  };
+}
+
+function avatarUrlFor(userId: string, avatarHash?: string | null): string | undefined {
+  if (!userId) return undefined;
+  if (avatarHash) {
+    const ext = avatarHash.startsWith("a_") ? "gif" : "png";
+    return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=128`;
+  }
+  // Default avatar (new system: (userId >> 22) % 6)
+  try {
+    const idx = Number((BigInt(userId) >> 22n) % 6n);
+    return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
+  } catch { return undefined; }
+}
+
+async function handleMyr(interaction: any): Promise<Response> {
+  const options = interaction.data?.options ?? [];
+  const targetUserId: string = getOpt(options, "user") ?? callerUserId(interaction);
+  const resolvedUser = interaction.data?.resolved?.users?.[targetUserId];
+  const avatar = avatarUrlFor(targetUserId, resolvedUser?.avatar);
+  const displayName = resolvedUser?.global_name ?? resolvedUser?.username
+    ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? "User";
+
+  const data = await fetchMyrData(targetUserId);
+  const total = Number(data?.total_accounts ?? 0);
+
+  if (!data || total === 0) {
+    return new Response(JSON.stringify({
+      type: RESP_CHANNEL_MSG,
+      data: {
+        flags: 64,
+        embeds: [{
+          color: 0xFFFF00,
+          title: "📋 My Registration Details",
+          description: `❌ **No Registered Account Found for <@${targetUserId}>!**\n\n👉 Please register first using the CWL panel.`,
+        }],
+        allowed_mentions: { parse: [] },
+      },
+    }), { headers: { "Content-Type": "application/json" } });
+  }
+
+  const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
+  // Chunk into select menus of up to 25 options (Discord max).
+  const components: any[] = [];
+  for (let chunk = 0; chunk < accounts.length && components.length < 4; chunk += 25) {
+    const slice = accounts.slice(chunk, chunk + 25);
+    const opts = slice.map((acc, i) => {
+      const globalIdx = chunk + i;
+      const label = `👤 ${acc?.player_name ?? "Unknown"}`.slice(0, 100);
+      const desc = `🏰 TH ${acc?.town_hall ?? "?"} | 🛡️ ${acc?.assigned_clan_name ?? "—"} | ⌲ ${acc?.registration_type ?? "—"}`.slice(0, 100);
+      return { label, value: `${targetUserId}:${globalIdx}`, description: desc };
+    });
+    components.push({
+      type: 1,
+      components: [{
+        type: 3,
+        custom_id: `myr:pick:${targetUserId}:${chunk}`,
+        placeholder: "👤 My CWL Registered Accounts",
+        min_values: 1,
+        max_values: 1,
+        options: opts,
+      }],
+    });
+  }
+
+  return new Response(JSON.stringify({
+    type: RESP_CHANNEL_MSG,
+    data: {
+      flags: 64,
+      embeds: [{
+        color: 0xFFFF00,
+        title: "📋 My Registration Details",
+        description: [
+          `👤 **CWL Registered Accounts for <@${targetUserId}>**`,
+          ``,
+          `Select an account from the dropdown below to view details.`,
+          ``,
+          `⚖️ *Make sure your War Weight is accurate before CWL starts.*`,
+          `⚔️ *Stay prepared. Stay competitive.*`,
+        ].join("\n"),
+        thumbnail: avatar ? { url: avatar } : undefined,
+        footer: { text: `${displayName} • ${total} account${total === 1 ? "" : "s"}` },
+      }],
+      components,
+      allowed_mentions: { parse: [] },
+    },
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
 
 Deno.serve(async (req) => {
+
+
+
+
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response("ok");
 
@@ -1966,6 +2109,49 @@ Deno.serve(async (req) => {
         })();
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
+      // /myr — user picked an account from the select menu
+      if (cid.startsWith("myr:pick:")) {
+        const val: string = interaction.data?.values?.[0] ?? "";
+        const [pickedUserId, idxStr] = val.split(":");
+        const idx = parseInt(idxStr ?? "", 10);
+        if (!pickedUserId || !Number.isFinite(idx)) {
+          return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+        }
+        const appId = interaction.application_id;
+        const token = interaction.token;
+        (async () => {
+          try {
+            const data = await fetchMyrData(pickedUserId);
+            const acc = data?.accounts?.[idx];
+            if (!acc) {
+              await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: "❌ Account not found.", flags: 64 }),
+              });
+              return;
+            }
+            const resolvedUser = interaction.message?.interaction?.user
+              ?? interaction.member?.user ?? interaction.user;
+            const avatar = avatarUrlFor(pickedUserId, resolvedUser?.id === pickedUserId ? resolvedUser?.avatar : undefined);
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                embeds: [myrAccountDetailEmbed(acc, avatar)],
+                components: [myrAccountButtonRow(acc)],
+                flags: 64,
+                allowed_mentions: { parse: [] },
+              }),
+            });
+          } catch (e) {
+            console.error("myr pick failed", e);
+            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
+            }).catch(() => {});
+          }
+        })();
+        return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+      }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
       console.error("component handler error", e);
@@ -2012,6 +2198,7 @@ Deno.serve(async (req) => {
         case "family_customize": return await handleFamilyCustomize(interaction);
         case "embed_editor": return await handleEmbedEditor(interaction);
         case "discord_link": return await handleDiscordLink(interaction);
+        case "myr": return await handleMyr(interaction);
         case "help": return handleHelp(interaction);
         case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
         case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
