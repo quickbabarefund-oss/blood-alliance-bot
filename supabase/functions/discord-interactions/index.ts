@@ -1841,7 +1841,7 @@ Deno.serve(async (req) => {
 
   // Fire-and-forget: ensure this guild has commands registered
   if (interaction.guild_id) {
-    ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e));
+    runAfterResponse(ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e)));
   }
 
   // Autocomplete: Family clans for /clan_info etc., or players table for /player_activity etc.
