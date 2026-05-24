@@ -510,7 +510,7 @@ async function handleWarResendResult(interaction: any) {
   const appId = interaction.application_id;
   const token = interaction.token;
 
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const sb = adminClient();
       const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
@@ -581,7 +581,7 @@ async function handleWarResendResult(interaction: any) {
       console.error("war_resend_result failed", e);
       await followUp(appId, token, `❌ Resend failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -596,7 +596,7 @@ async function handleWarLastResult(interaction: any) {
   const appId = interaction.application_id;
   const token = interaction.token;
 
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const sb = adminClient();
       const { data: war } = await sb.from("wars").select("*")
@@ -666,7 +666,7 @@ async function handleWarLastResult(interaction: any) {
       console.error("war_last_result failed", e);
       await followUp(appId, token, `❌ Failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -700,7 +700,7 @@ async function handleForceReset(interaction: any): Promise<Response> {
   const APP_ID = Deno.env.get("DISCORD_APPLICATION_ID")!;
   const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 
-  (async () => {
+  runAfterResponse((async () => {
     const log: string[] = [];
     try {
       // 1. Wipe per-guild command copies for this guild (kills duplicates / stale).
@@ -733,7 +733,7 @@ async function handleForceReset(interaction: any): Promise<Response> {
     } catch (e) {
       await followUp(appId, token, `❌ Force-reset failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
