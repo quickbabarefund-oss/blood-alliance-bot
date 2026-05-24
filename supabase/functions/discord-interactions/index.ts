@@ -92,6 +92,21 @@ async function followUp(applicationId: string, token: string, content: string, e
   });
 }
 
+function runAfterResponse(promise: Promise<unknown>) {
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(promise);
+  else promise.catch((e) => console.error("background task failed", e));
+}
+
+async function followUpPayload(applicationId: string, token: string, payload: any) {
+  const res = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${token}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allowed_mentions: { parse: [] }, ...payload }),
+  });
+  if (!res.ok) console.error("followUpPayload failed", res.status, await res.text().catch(() => ""));
+}
+
 function getOpt(opts: any[] | undefined, name: string): any { return opts?.find((o) => o.name === name)?.value; }
 function getSubOptions(opts: any[] | undefined): { sub: string; options: any[] } {
   const sub = opts?.[0]; return { sub: sub?.name ?? "", options: sub?.options ?? [] };
@@ -244,7 +259,7 @@ async function handleRefresh(interaction: any) {
   const clan = getOpt(opts, "clan");
   const appId = interaction.application_id;
   const token = interaction.token;
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const url = `${SUPABASE_URL}/functions/v1/poll-clans`;
       const body = clan ? JSON.stringify({ clan_tag: normalizeTag(clan) }) : "{}";
@@ -257,7 +272,7 @@ async function handleRefresh(interaction: any) {
     } catch (e) {
       await followUp(appId, token, `❌ Refresh failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -302,6 +317,9 @@ async function handleLink(interaction: any) {
   const targetUser = getOpt(options, "user") ?? callerUserId(interaction);
   try {
     await postCoc({ action: "link", type, user_id: String(targetUser), tag });
+    if (type === "player") {
+      await adminClient().from("coc_links").upsert({ player_tag: tag, user_id: String(targetUser), refreshed_at: new Date().toISOString() });
+    }
     return replyEmbed({
       title: `🔗 ${type === "clan" ? "Clan" : "Player"} Linked`,
       description: `Successfully linked **${type}** \`${tag}\` to <@${targetUser}>.`,
@@ -325,6 +343,9 @@ async function handleUnlink(interaction: any) {
   const targetUser = getOpt(options, "user") ?? callerUserId(interaction);
   try {
     await postCoc({ action: "unlink", type, user_id: String(targetUser), tag });
+    if (type === "player") {
+      await adminClient().from("coc_links").delete().eq("player_tag", tag).eq("user_id", String(targetUser));
+    }
     return replyEmbed({
       title: `🔓 ${type === "clan" ? "Clan" : "Player"} Unlinked`,
       description: `Removed link for **${type}** \`${tag}\` from <@${targetUser}>.`,
@@ -495,7 +516,7 @@ async function handleWarResendResult(interaction: any) {
   const appId = interaction.application_id;
   const token = interaction.token;
 
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const sb = adminClient();
       const { data: cfg } = await sb.from("war_track_config").select("log_channel_id")
@@ -566,7 +587,7 @@ async function handleWarResendResult(interaction: any) {
       console.error("war_resend_result failed", e);
       await followUp(appId, token, `❌ Resend failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -581,7 +602,7 @@ async function handleWarLastResult(interaction: any) {
   const appId = interaction.application_id;
   const token = interaction.token;
 
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const sb = adminClient();
       const { data: war } = await sb.from("wars").select("*")
@@ -651,7 +672,7 @@ async function handleWarLastResult(interaction: any) {
       console.error("war_last_result failed", e);
       await followUp(appId, token, `❌ Failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -685,7 +706,7 @@ async function handleForceReset(interaction: any): Promise<Response> {
   const APP_ID = Deno.env.get("DISCORD_APPLICATION_ID")!;
   const BOT = Deno.env.get("DISCORD_BOT_TOKEN")!;
 
-  (async () => {
+  runAfterResponse((async () => {
     const log: string[] = [];
     try {
       // 1. Wipe per-guild command copies for this guild (kills duplicates / stale).
@@ -718,7 +739,7 @@ async function handleForceReset(interaction: any): Promise<Response> {
     } catch (e) {
       await followUp(appId, token, `❌ Force-reset failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -731,7 +752,7 @@ async function handleDonationReset(interaction: any): Promise<Response> {
   const appId = interaction.application_id;
   const token = interaction.token;
 
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const sb = adminClient();
       const monthKey = istMonthKey();
@@ -774,16 +795,16 @@ async function handleDonationReset(interaction: any): Promise<Response> {
       await followUp(appId, token, `✅ Donation totals reset to 0 for ${scope} (month \`${monthKey}\`). ${totalRows} player rows zeroed. Leaderboard will refresh on next poll (within ~5 min) or you can run \`/refresh\`.`, true);
 
       // Fire-and-forget: trigger an immediate poll to re-baseline snapshots
-      fetch(`${SUPABASE_URL}/functions/v1/poll-clans`, {
+      runAfterResponse(fetch(`${SUPABASE_URL}/functions/v1/poll-clans`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
         body: clanTags.length === 1 ? JSON.stringify({ clan_tag: clanTags[0] }) : "{}",
-      }).catch((e) => console.error("post-reset poll trigger failed", e));
+      }).catch((e) => console.error("post-reset poll trigger failed", e)));
     } catch (e) {
       console.error("donation_reset failed", e);
       await followUp(appId, token, `❌ Reset failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
@@ -1521,31 +1542,24 @@ async function handleCocCmd(
   const token = interaction.token;
   const cmdName = interaction.data.name;
 
-  // If no explicit tag, check linked accounts for target/self.
-  if (!tag) {
-    const uid = targetUser ?? caller;
-    const links = await fetchUserLinks(uid);
-    if (links.length > 1) {
-      // Ephemeral picker — only the caller can see it.
-      return new Response(JSON.stringify({
-        type: RESP_CHANNEL_MSG,
-        data: { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 },
-      }), { headers: { "Content-Type": "application/json" } });
-    }
-  }
-
-  (async () => {
+  runAfterResponse((async () => {
     try {
+      // If no explicit tag, check linked accounts after acknowledging Discord.
+      if (!tag) {
+        const uid = targetUser ?? caller;
+        const links = await fetchUserLinks(uid);
+        if (links.length > 1) {
+          await followUpPayload(appId, token, { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 });
+          return;
+        }
+      }
       const data = await builder(guildId, { tag, targetUser, caller });
-      await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, flags: 0 }),
-      });
+      await followUpPayload(appId, token, { ...data, flags: 0 });
     } catch (e) {
       console.error("coc cmd failed", e);
       await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(false);
 }
 const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://clan-loot-tracker.lovable.app";
@@ -1667,7 +1681,20 @@ async function fetchMyrData(discordUserId: string): Promise<any | null> {
   try {
     const r = await fetch(`${MYR_API}?discord_user_id=${encodeURIComponent(discordUserId)}`);
     if (!r.ok) { console.error("myr fetch", r.status, await r.text().catch(() => "")); return null; }
-    return await r.json();
+    const json = await r.json();
+    const accounts = Array.isArray(json?.accounts) ? json.accounts : [];
+    if (accounts.length) {
+      const now = new Date().toISOString();
+      const rows = accounts
+        .map((acc: any) => acc?.player_tag ? { player_tag: normalizeTag(acc.player_tag), user_id: String(discordUserId), refreshed_at: now } : null)
+        .filter(Boolean);
+      if (rows.length) {
+        runAfterResponse(adminClient().from("coc_links").upsert(rows).then(({ error }) => {
+          if (error) console.error("myr coc_links upsert", error);
+        }));
+      }
+    }
+    return json;
   } catch (e) { console.error("myr fetch err", e); return null; }
 }
 
@@ -1731,51 +1758,50 @@ async function handleMyr(interaction: any): Promise<Response> {
   const displayName = resolvedUser?.global_name ?? resolvedUser?.username
     ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? "User";
 
-  const data = await fetchMyrData(targetUserId);
-  const total = Number(data?.total_accounts ?? 0);
+  const appId = interaction.application_id;
+  const token = interaction.token;
 
-  if (!data || total === 0) {
-    return new Response(JSON.stringify({
-      type: RESP_CHANNEL_MSG,
-      data: {
+  runAfterResponse((async () => {
+    const data = await fetchMyrData(targetUserId);
+    const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
+    const total = Number(data?.total_accounts ?? data?.account_count ?? accounts.length ?? 0);
+
+    if (!data || total === 0) {
+      await followUpPayload(appId, token, {
         flags: 64,
         embeds: [{
           color: 0xFFFF00,
           title: "📋 My Registration Details",
           description: `❌ **No Registered Account Found for <@${targetUserId}>!**\n\n👉 Please register first using the CWL panel.`,
         }],
-        allowed_mentions: { parse: [] },
-      },
-    }), { headers: { "Content-Type": "application/json" } });
-  }
+      });
+      return;
+    }
 
-  const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
-  // Chunk into select menus of up to 25 options (Discord max).
-  const components: any[] = [];
-  for (let chunk = 0; chunk < accounts.length && components.length < 4; chunk += 25) {
-    const slice = accounts.slice(chunk, chunk + 25);
-    const opts = slice.map((acc, i) => {
-      const globalIdx = chunk + i;
-      const label = `👤 ${acc?.player_name ?? "Unknown"}`.slice(0, 100);
-      const desc = `🏰 TH ${acc?.town_hall ?? "?"} | 🛡️ ${acc?.assigned_clan_name ?? "—"} | ⌲ ${acc?.registration_type ?? "—"}`.slice(0, 100);
-      return { label, value: `${targetUserId}:${globalIdx}`, description: desc };
-    });
-    components.push({
-      type: 1,
-      components: [{
-        type: 3,
-        custom_id: `myr:pick:${targetUserId}:${chunk}`,
-        placeholder: "👤 My CWL Registered Accounts",
-        min_values: 1,
-        max_values: 1,
-        options: opts,
-      }],
-    });
-  }
+    // Chunk into select menus of up to 25 options (Discord max).
+    const components: any[] = [];
+    for (let chunk = 0; chunk < accounts.length && components.length < 4; chunk += 25) {
+      const slice = accounts.slice(chunk, chunk + 25);
+      const opts = slice.map((acc, i) => {
+        const globalIdx = chunk + i;
+        const label = `👤 ${acc?.player_name ?? "Unknown"}`.slice(0, 100);
+        const desc = `🏰 TH ${acc?.town_hall ?? "?"} | 🛡️ ${acc?.assigned_clan_name ?? "—"} | ⌲ ${acc?.registration_type ?? "—"}`.slice(0, 100);
+        return { label, value: `${targetUserId}:${globalIdx}`, description: desc };
+      });
+      components.push({
+        type: 1,
+        components: [{
+          type: 3,
+          custom_id: `myr:pick:${targetUserId}:${chunk}`,
+          placeholder: "👤 My CWL Registered Accounts",
+          min_values: 1,
+          max_values: 1,
+          options: opts,
+        }],
+      });
+    }
 
-  return new Response(JSON.stringify({
-    type: RESP_CHANNEL_MSG,
-    data: {
+    await followUpPayload(appId, token, {
       flags: 64,
       embeds: [{
         color: 0xFFFF00,
@@ -1792,9 +1818,9 @@ async function handleMyr(interaction: any): Promise<Response> {
         footer: { text: `${displayName} • ${total} account${total === 1 ? "" : "s"}` },
       }],
       components,
-      allowed_mentions: { parse: [] },
-    },
-  }), { headers: { "Content-Type": "application/json" } });
+    });
+  })());
+  return deferred(true);
 }
 
 
@@ -1815,7 +1841,7 @@ Deno.serve(async (req) => {
 
   // Fire-and-forget: ensure this guild has commands registered
   if (interaction.guild_id) {
-    ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e));
+    runAfterResponse(ensureGuildSynced(interaction.guild_id, interaction.guild?.name).catch((e) => console.error("ensureGuildSynced", e)));
   }
 
   // Autocomplete: Family clans for /clan_info etc., or players table for /player_activity etc.
@@ -2064,23 +2090,17 @@ Deno.serve(async (req) => {
         const guildId = interaction.guild_id ?? "";
         const appId = interaction.application_id;
         const token = interaction.token;
-        (async () => {
+        runAfterResponse((async () => {
           try {
             const data = await builder(guildId, { tag, targetUser, caller });
             // Post the result as a normal (public) follow-up message.
             // Leave the ephemeral picker untouched so the caller can pick again.
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...data, flags: 0 }),
-            });
+            await followUpPayload(appId, token, { ...data, flags: 0 });
           } catch (e) {
             console.error("coc pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/followup`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
-            }).catch(() => {});
+            await followUpPayload(appId, token, { content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 });
           }
-        })();
+        })());
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       // /discord_link — user picked clan(s) from the select menu
@@ -2089,24 +2109,18 @@ Deno.serve(async (req) => {
         const appId = interaction.application_id;
         const token = interaction.token;
         const picked: string[] = (interaction.data?.values ?? []).map((v: string) => normalizeTag(v));
-        (async () => {
+        runAfterResponse((async () => {
           try {
             const embeds = await buildDiscordLinkEmbeds(guildId, picked);
             // Send up to 10 embeds per follow-up
             for (let i = 0; i < embeds.length; i += 10) {
-              await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ embeds: embeds.slice(i, i + 10), flags: 64, allowed_mentions: { parse: [] } }),
-              });
+              await followUpPayload(appId, token, { embeds: embeds.slice(i, i + 10), flags: 64 });
             }
           } catch (e) {
             console.error("disclink failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
-            }).catch(() => {});
+            await followUpPayload(appId, token, { content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 });
           }
-        })();
+        })());
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       // /myr — user picked an account from the select menu
@@ -2119,37 +2133,27 @@ Deno.serve(async (req) => {
         }
         const appId = interaction.application_id;
         const token = interaction.token;
-        (async () => {
+        runAfterResponse((async () => {
           try {
             const data = await fetchMyrData(pickedUserId);
             const acc = data?.accounts?.[idx];
             if (!acc) {
-              await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: "❌ Account not found.", flags: 64 }),
-              });
+              await followUpPayload(appId, token, { content: "❌ Account not found.", flags: 64 });
               return;
             }
             const resolvedUser = interaction.message?.interaction?.user
               ?? interaction.member?.user ?? interaction.user;
             const avatar = avatarUrlFor(pickedUserId, resolvedUser?.id === pickedUserId ? resolvedUser?.avatar : undefined);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                embeds: [myrAccountDetailEmbed(acc, avatar)],
-                components: [myrAccountButtonRow(acc)],
-                flags: 64,
-                allowed_mentions: { parse: [] },
-              }),
+            await followUpPayload(appId, token, {
+              embeds: [myrAccountDetailEmbed(acc, avatar)],
+              components: [myrAccountButtonRow(acc)],
+              flags: 64,
             });
           } catch (e) {
             console.error("myr pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
-            }).catch(() => {});
+            await followUpPayload(appId, token, { content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 });
           }
-        })();
+        })());
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
