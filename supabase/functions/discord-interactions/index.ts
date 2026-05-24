@@ -92,6 +92,21 @@ async function followUp(applicationId: string, token: string, content: string, e
   });
 }
 
+function runAfterResponse(promise: Promise<unknown>) {
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(promise);
+  else promise.catch((e) => console.error("background task failed", e));
+}
+
+async function followUpPayload(applicationId: string, token: string, payload: any) {
+  const res = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${token}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allowed_mentions: { parse: [] }, ...payload }),
+  });
+  if (!res.ok) console.error("followUpPayload failed", res.status, await res.text().catch(() => ""));
+}
+
 function getOpt(opts: any[] | undefined, name: string): any { return opts?.find((o) => o.name === name)?.value; }
 function getSubOptions(opts: any[] | undefined): { sub: string; options: any[] } {
   const sub = opts?.[0]; return { sub: sub?.name ?? "", options: sub?.options ?? [] };
