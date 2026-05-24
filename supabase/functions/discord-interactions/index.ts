@@ -1695,7 +1695,11 @@ async function fetchMyrData(discordUserId: string): Promise<any | null> {
       const rows = accounts
         .map((acc: any) => acc?.player_tag ? { player_tag: normalizeTag(acc.player_tag), user_id: String(discordUserId), refreshed_at: now } : null)
         .filter(Boolean);
-      if (rows.length) adminClient().from("coc_links").upsert(rows).then(({ error }) => { if (error) console.error("myr coc_links upsert", error); });
+      if (rows.length) {
+        runAfterResponse(adminClient().from("coc_links").upsert(rows).then(({ error }) => {
+          if (error) console.error("myr coc_links upsert", error);
+        }));
+      }
     }
     return json;
   } catch (e) { console.error("myr fetch err", e); return null; }
