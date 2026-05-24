@@ -317,6 +317,9 @@ async function handleLink(interaction: any) {
   const targetUser = getOpt(options, "user") ?? callerUserId(interaction);
   try {
     await postCoc({ action: "link", type, user_id: String(targetUser), tag });
+    if (type === "player") {
+      await adminClient().from("coc_links").upsert({ player_tag: tag, user_id: String(targetUser), refreshed_at: new Date().toISOString() });
+    }
     return replyEmbed({
       title: `🔗 ${type === "clan" ? "Clan" : "Player"} Linked`,
       description: `Successfully linked **${type}** \`${tag}\` to <@${targetUser}>.`,
@@ -340,6 +343,9 @@ async function handleUnlink(interaction: any) {
   const targetUser = getOpt(options, "user") ?? callerUserId(interaction);
   try {
     await postCoc({ action: "unlink", type, user_id: String(targetUser), tag });
+    if (type === "player") {
+      await adminClient().from("coc_links").delete().eq("player_tag", tag).eq("user_id", String(targetUser));
+    }
     return replyEmbed({
       title: `🔓 ${type === "clan" ? "Clan" : "Player"} Unlinked`,
       description: `Removed link for **${type}** \`${tag}\` from <@${targetUser}>.`,
