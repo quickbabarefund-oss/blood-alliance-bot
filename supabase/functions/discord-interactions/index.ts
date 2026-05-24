@@ -2133,37 +2133,27 @@ Deno.serve(async (req) => {
         }
         const appId = interaction.application_id;
         const token = interaction.token;
-        (async () => {
+        runAfterResponse((async () => {
           try {
             const data = await fetchMyrData(pickedUserId);
             const acc = data?.accounts?.[idx];
             if (!acc) {
-              await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content: "❌ Account not found.", flags: 64 }),
-              });
+              await followUpPayload(appId, token, { content: "❌ Account not found.", flags: 64 });
               return;
             }
             const resolvedUser = interaction.message?.interaction?.user
               ?? interaction.member?.user ?? interaction.user;
             const avatar = avatarUrlFor(pickedUserId, resolvedUser?.id === pickedUserId ? resolvedUser?.avatar : undefined);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                embeds: [myrAccountDetailEmbed(acc, avatar)],
-                components: [myrAccountButtonRow(acc)],
-                flags: 64,
-                allowed_mentions: { parse: [] },
-              }),
+            await followUpPayload(appId, token, {
+              embeds: [myrAccountDetailEmbed(acc, avatar)],
+              components: [myrAccountButtonRow(acc)],
+              flags: 64,
             });
           } catch (e) {
             console.error("myr pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
-            }).catch(() => {});
+            await followUpPayload(appId, token, { content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 });
           }
-        })();
+        })());
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
