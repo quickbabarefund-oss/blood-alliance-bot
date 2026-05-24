@@ -1688,7 +1688,16 @@ async function fetchMyrData(discordUserId: string): Promise<any | null> {
   try {
     const r = await fetch(`${MYR_API}?discord_user_id=${encodeURIComponent(discordUserId)}`);
     if (!r.ok) { console.error("myr fetch", r.status, await r.text().catch(() => "")); return null; }
-    return await r.json();
+    const json = await r.json();
+    const accounts = Array.isArray(json?.accounts) ? json.accounts : [];
+    if (accounts.length) {
+      const now = new Date().toISOString();
+      const rows = accounts
+        .map((acc: any) => acc?.player_tag ? { player_tag: normalizeTag(acc.player_tag), user_id: String(discordUserId), refreshed_at: now } : null)
+        .filter(Boolean);
+      if (rows.length) adminClient().from("coc_links").upsert(rows).then(({ error }) => { if (error) console.error("myr coc_links upsert", error); });
+    }
+    return json;
   } catch (e) { console.error("myr fetch err", e); return null; }
 }
 
@@ -1753,7 +1762,8 @@ async function handleMyr(interaction: any): Promise<Response> {
     ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? "User";
 
   const data = await fetchMyrData(targetUserId);
-  const total = Number(data?.total_accounts ?? 0);
+  const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
+  const total = Number(data?.total_accounts ?? data?.account_count ?? accounts.length ?? 0);
 
   if (!data || total === 0) {
     return new Response(JSON.stringify({
@@ -1770,7 +1780,6 @@ async function handleMyr(interaction: any): Promise<Response> {
     }), { headers: { "Content-Type": "application/json" } });
   }
 
-  const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
   // Chunk into select menus of up to 25 options (Discord max).
   const components: any[] = [];
   for (let chunk = 0; chunk < accounts.length && components.length < 4; chunk += 25) {
