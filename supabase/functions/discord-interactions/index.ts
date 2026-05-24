@@ -2090,23 +2090,17 @@ Deno.serve(async (req) => {
         const guildId = interaction.guild_id ?? "";
         const appId = interaction.application_id;
         const token = interaction.token;
-        (async () => {
+        runAfterResponse((async () => {
           try {
             const data = await builder(guildId, { tag, targetUser, caller });
             // Post the result as a normal (public) follow-up message.
             // Leave the ephemeral picker untouched so the caller can pick again.
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...data, flags: 0 }),
-            });
+            await followUpPayload(appId, token, { ...data, flags: 0 });
           } catch (e) {
             console.error("coc pick failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}/followup`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
-            }).catch(() => {});
+            await followUpPayload(appId, token, { content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 });
           }
-        })();
+        })());
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       // /discord_link — user picked clan(s) from the select menu
@@ -2115,24 +2109,18 @@ Deno.serve(async (req) => {
         const appId = interaction.application_id;
         const token = interaction.token;
         const picked: string[] = (interaction.data?.values ?? []).map((v: string) => normalizeTag(v));
-        (async () => {
+        runAfterResponse((async () => {
           try {
             const embeds = await buildDiscordLinkEmbeds(guildId, picked);
             // Send up to 10 embeds per follow-up
             for (let i = 0; i < embeds.length; i += 10) {
-              await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ embeds: embeds.slice(i, i + 10), flags: 64, allowed_mentions: { parse: [] } }),
-              });
+              await followUpPayload(appId, token, { embeds: embeds.slice(i, i + 10), flags: 64 });
             }
           } catch (e) {
             console.error("disclink failed", e);
-            await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 }),
-            }).catch(() => {});
+            await followUpPayload(appId, token, { content: `❌ ${e instanceof Error ? e.message : String(e)}`, flags: 64 });
           }
-        })();
+        })());
         return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
       }
       // /myr — user picked an account from the select menu
