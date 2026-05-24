@@ -1555,18 +1555,15 @@ async function handleCocCmd(
     }
   }
 
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const data = await builder(guildId, { tag, targetUser, caller });
-      await fetch(`https://discord.com/api/v10/webhooks/${appId}/${token}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, flags: 0 }),
-      });
+      await followUpPayload(appId, token, { ...data, flags: 0 });
     } catch (e) {
       console.error("coc cmd failed", e);
       await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(false);
 }
 const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://clan-loot-tracker.lovable.app";
