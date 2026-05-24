@@ -1765,51 +1765,50 @@ async function handleMyr(interaction: any): Promise<Response> {
   const displayName = resolvedUser?.global_name ?? resolvedUser?.username
     ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? "User";
 
-  const data = await fetchMyrData(targetUserId);
-  const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
-  const total = Number(data?.total_accounts ?? data?.account_count ?? accounts.length ?? 0);
+  const appId = interaction.application_id;
+  const token = interaction.token;
 
-  if (!data || total === 0) {
-    return new Response(JSON.stringify({
-      type: RESP_CHANNEL_MSG,
-      data: {
+  runAfterResponse((async () => {
+    const data = await fetchMyrData(targetUserId);
+    const accounts: any[] = Array.isArray(data?.accounts) ? data.accounts : [];
+    const total = Number(data?.total_accounts ?? data?.account_count ?? accounts.length ?? 0);
+
+    if (!data || total === 0) {
+      await followUpPayload(appId, token, {
         flags: 64,
         embeds: [{
           color: 0xFFFF00,
           title: "📋 My Registration Details",
           description: `❌ **No Registered Account Found for <@${targetUserId}>!**\n\n👉 Please register first using the CWL panel.`,
         }],
-        allowed_mentions: { parse: [] },
-      },
-    }), { headers: { "Content-Type": "application/json" } });
-  }
+      });
+      return;
+    }
 
-  // Chunk into select menus of up to 25 options (Discord max).
-  const components: any[] = [];
-  for (let chunk = 0; chunk < accounts.length && components.length < 4; chunk += 25) {
-    const slice = accounts.slice(chunk, chunk + 25);
-    const opts = slice.map((acc, i) => {
-      const globalIdx = chunk + i;
-      const label = `👤 ${acc?.player_name ?? "Unknown"}`.slice(0, 100);
-      const desc = `🏰 TH ${acc?.town_hall ?? "?"} | 🛡️ ${acc?.assigned_clan_name ?? "—"} | ⌲ ${acc?.registration_type ?? "—"}`.slice(0, 100);
-      return { label, value: `${targetUserId}:${globalIdx}`, description: desc };
-    });
-    components.push({
-      type: 1,
-      components: [{
-        type: 3,
-        custom_id: `myr:pick:${targetUserId}:${chunk}`,
-        placeholder: "👤 My CWL Registered Accounts",
-        min_values: 1,
-        max_values: 1,
-        options: opts,
-      }],
-    });
-  }
+    // Chunk into select menus of up to 25 options (Discord max).
+    const components: any[] = [];
+    for (let chunk = 0; chunk < accounts.length && components.length < 4; chunk += 25) {
+      const slice = accounts.slice(chunk, chunk + 25);
+      const opts = slice.map((acc, i) => {
+        const globalIdx = chunk + i;
+        const label = `👤 ${acc?.player_name ?? "Unknown"}`.slice(0, 100);
+        const desc = `🏰 TH ${acc?.town_hall ?? "?"} | 🛡️ ${acc?.assigned_clan_name ?? "—"} | ⌲ ${acc?.registration_type ?? "—"}`.slice(0, 100);
+        return { label, value: `${targetUserId}:${globalIdx}`, description: desc };
+      });
+      components.push({
+        type: 1,
+        components: [{
+          type: 3,
+          custom_id: `myr:pick:${targetUserId}:${chunk}`,
+          placeholder: "👤 My CWL Registered Accounts",
+          min_values: 1,
+          max_values: 1,
+          options: opts,
+        }],
+      });
+    }
 
-  return new Response(JSON.stringify({
-    type: RESP_CHANNEL_MSG,
-    data: {
+    await followUpPayload(appId, token, {
       flags: 64,
       embeds: [{
         color: 0xFFFF00,
@@ -1826,9 +1825,9 @@ async function handleMyr(interaction: any): Promise<Response> {
         footer: { text: `${displayName} • ${total} account${total === 1 ? "" : "s"}` },
       }],
       components,
-      allowed_mentions: { parse: [] },
-    },
-  }), { headers: { "Content-Type": "application/json" } });
+    });
+  })());
+  return deferred(true);
 }
 
 
