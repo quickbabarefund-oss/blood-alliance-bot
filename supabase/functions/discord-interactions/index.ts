@@ -1542,21 +1542,17 @@ async function handleCocCmd(
   const token = interaction.token;
   const cmdName = interaction.data.name;
 
-  // If no explicit tag, check linked accounts for target/self.
-  if (!tag) {
-    const uid = targetUser ?? caller;
-    const links = await fetchUserLinks(uid);
-    if (links.length > 1) {
-      // Ephemeral picker — only the caller can see it.
-      return new Response(JSON.stringify({
-        type: RESP_CHANNEL_MSG,
-        data: { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 },
-      }), { headers: { "Content-Type": "application/json" } });
-    }
-  }
-
   runAfterResponse((async () => {
     try {
+      // If no explicit tag, check linked accounts after acknowledging Discord.
+      if (!tag) {
+        const uid = targetUser ?? caller;
+        const links = await fetchUserLinks(uid);
+        if (links.length > 1) {
+          await followUpPayload(appId, token, { ...accountPickerPayload(cmdName, targetUser, links, caller), flags: 64 });
+          return;
+        }
+      }
       const data = await builder(guildId, { tag, targetUser, caller });
       await followUpPayload(appId, token, { ...data, flags: 0 });
     } catch (e) {
