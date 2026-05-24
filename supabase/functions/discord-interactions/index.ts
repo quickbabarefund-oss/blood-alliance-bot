@@ -259,7 +259,7 @@ async function handleRefresh(interaction: any) {
   const clan = getOpt(opts, "clan");
   const appId = interaction.application_id;
   const token = interaction.token;
-  (async () => {
+  runAfterResponse((async () => {
     try {
       const url = `${SUPABASE_URL}/functions/v1/poll-clans`;
       const body = clan ? JSON.stringify({ clan_tag: normalizeTag(clan) }) : "{}";
@@ -272,7 +272,7 @@ async function handleRefresh(interaction: any) {
     } catch (e) {
       await followUp(appId, token, `❌ Refresh failed: ${e instanceof Error ? e.message : String(e)}`, true);
     }
-  })();
+  })());
   return deferred(true);
 }
 
