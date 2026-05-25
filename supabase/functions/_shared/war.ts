@@ -274,24 +274,91 @@ export async function buildReminderPayload(opts: {
 }
 
 // --- Rule evaluation ---
-// decision = 'win' | 'lose'. Returns array of { player_tag, name, rule, detail } violations.
-export type RuleBreak = { player_tag: string; player_name: string; rule: string; detail: string };
+export type RuleBreak = {
+  player_tag: string;
+  player_name: string;
+  rule: string;
+  detail: string;
+  attack_window?: "first_16h" | "mid" | "last_8h";
+};
+
+export type ClanRules = {
+  cleanup_window_hours: number;       // last-N-hours cleanup window (default 8)
+  first_window_hours: number;         // early window from war start (default 16)
+  early_min_stars_win: number;        // 2nd-attack stars threshold during early window (win)
+  early_min_stars_lose: number;       // ... (lose)
+  low_star_min_2nd_win: number;       // 2nd-attack min stars outside cleanup (win)
+  low_star_min_2nd_lose: number;      // (lose)
+  mirror_first_enabled: boolean;
+  mirror_first_min_stars_win: number; // default 3
+  mirror_first_min_stars_lose: number;// default 2
+};
+
+export const DEFAULT_CLAN_RULES: ClanRules = {
+  cleanup_window_hours: 8,
+  first_window_hours: 16,
+  early_min_stars_win: 3,
+  early_min_stars_lose: 2,
+  low_star_min_2nd_win: 2,
+  low_star_min_2nd_lose: 1,
+  mirror_first_enabled: true,
+  mirror_first_min_stars_win: 3,
+  mirror_first_min_stars_lose: 2,
+};
+
+function parseRuleValue(key: keyof ClanRules, raw: string): any {
+  if (key === "mirror_first_enabled") return raw === "true" || raw === "1";
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : DEFAULT_CLAN_RULES[key];
+}
+
+export async function loadClanRules(guildId: string, clanTag: string): Promise<ClanRules> {
+  const sb = adminClient();
+  const { data } = await sb.from("clan_war_rules")
+    .select("key,value").eq("guild_id", guildId).eq("clan_tag", clanTag);
+  const out: ClanRules = { ...DEFAULT_CLAN_RULES };
+  for (const r of (data ?? []) as { key: string; value: string }[]) {
+    if (r.key in out) (out as any)[r.key] = parseRuleValue(r.key as keyof ClanRules, r.value);
+  }
+  return out;
+}
+
+function windowLabel(w: "first_16h" | "mid" | "last_8h", rules: ClanRules): string {
+  if (w === "first_16h") return `first-${rules.first_window_hours}h`;
+  if (w === "last_8h") return `last-${rules.cleanup_window_hours}h cleanup`;
+  return "mid-war";
+}
 
 export function evaluateRules(opts: {
   decision: "win" | "lose";
+  startTime?: Date;
   endTime: Date;
   ourMembers: WarMember[];
   oppMembers?: WarMember[];
-  // Map of `${attackerTag}:${order}` -> first-observed timestamp (war_attacks.recorded_at).
-  // Used to decide whether an attack happened inside the last-8h cleanup window.
   attackTimes?: Record<string, Date | string>;
+  rules?: ClanRules;
 }): RuleBreak[] {
+  const rules = opts.rules ?? DEFAULT_CLAN_RULES;
   const breaks: RuleBreak[] = [];
-  const last8Start = new Date(opts.endTime.getTime() - 8 * 3600_000);
+  const cleanupStart = new Date(opts.endTime.getTime() - rules.cleanup_window_hours * 3600_000);
+  const firstEnd = opts.startTime
+    ? new Date(opts.startTime.getTime() + rules.first_window_hours * 3600_000)
+    : null;
   const times = opts.attackTimes ?? {};
+  const isWin = opts.decision === "win";
+  const earlyMin = isWin ? rules.early_min_stars_win : rules.early_min_stars_lose;
+  const lowMin2nd = isWin ? rules.low_star_min_2nd_win : rules.low_star_min_2nd_lose;
+  const mirrorMin = isWin ? rules.mirror_first_min_stars_win : rules.mirror_first_min_stars_lose;
 
   const posMap: Record<string, number> = {};
   for (const m of (opts.oppMembers ?? [])) posMap[m.tag] = m.mapPosition;
+
+  const classify = (ts: Date | null): "first_16h" | "mid" | "last_8h" => {
+    if (!ts) return "mid";
+    if (ts >= cleanupStart) return "last_8h";
+    if (firstEnd && ts < firstEnd) return "first_16h";
+    return "mid";
+  };
 
   for (const m of opts.ourMembers) {
     const attacks = (m.attacks ?? []).slice().sort((a, b) => a.order - b.order);
@@ -305,62 +372,63 @@ export function evaluateRules(opts: {
       });
     }
 
-    // 1st attack mirror rule — clearer wording
-    if (attacks.length >= 1) {
+    // 1st attack mirror rule
+    if (rules.mirror_first_enabled && attacks.length >= 1) {
       const a = attacks[0];
+      const tsRaw = times[`${m.tag}:${a.order}`];
+      const ts = tsRaw ? (tsRaw instanceof Date ? tsRaw : new Date(tsRaw)) : null;
+      const win = classify(ts);
       const defPos = posMap[a.defenderTag] ?? -999;
       const isMirror = defPos === myPos;
-      const minStars = opts.decision === "win" ? 3 : 2;
+      const winLabel = windowLabel(win, rules);
       if (!isMirror) {
         breaks.push({
           player_tag: m.tag, player_name: m.name,
           rule: "mirror_first",
-          detail: `1st attack should mirror own #${myPos} for ${minStars}⭐ — hit #${defPos} for ${a.stars}⭐`,
+          attack_window: win,
+          detail: `1st attack should mirror own #${myPos} for ${mirrorMin}⭐ — hit #${defPos} for ${a.stars}⭐ (${winLabel})`,
         });
-      } else if (a.stars < minStars) {
+      } else if (a.stars < mirrorMin) {
         breaks.push({
           player_tag: m.tag, player_name: m.name,
           rule: "mirror_first",
-          detail: `1st attack mirrored own #${myPos} but only got ${a.stars}⭐ (need ${minStars}⭐)`,
+          attack_window: win,
+          detail: `1st attack mirrored own #${myPos} but only got ${a.stars}⭐ (need ${mirrorMin}⭐, ${winLabel})`,
         });
       }
     }
 
-    // Per-attack rules
+    // Per-attack rules — 2nd attack only
     for (let i = 0; i < attacks.length; i++) {
       const a = attacks[i];
+      if (i < 1) continue; // 1st handled above
       const tsRaw = times[`${m.tag}:${a.order}`];
       const ts = tsRaw ? (tsRaw instanceof Date ? tsRaw : new Date(tsRaw)) : null;
-      const inCleanup = ts ? ts >= last8Start : false;
+      const win = classify(ts);
+      const winLabel = windowLabel(win, rules);
 
-      if (opts.decision === "win") {
-        // 2nd attack must be inside last-8h cleanup window. Early 2nd attacks (esp. 3⭐ steals) = violation.
-        if (i >= 1 && ts && !inCleanup) {
-          breaks.push({
-            player_tag: m.tag, player_name: m.name,
-            rule: "early_cleanup",
-            detail: `2nd attack done before last-8h cleanup window (got ${a.stars}⭐)`,
-          });
-        }
-        // Low-star: 1st handled by mirror_first; 2nd needs ≥2⭐ unless in cleanup window (then 1⭐ ok).
-        if (i >= 1 && a.stars < 2) {
-          if (!(inCleanup && a.stars >= 1)) {
-            breaks.push({
-              player_tag: m.tag, player_name: m.name,
-              rule: "low_stars",
-              detail: `2nd attack got ${a.stars}⭐ (need 2⭐${inCleanup ? "" : ", or 1⭐ inside last-8h cleanup"})`,
-            });
-          }
-        }
-      } else {
-        // Lose war: any attack must get ≥1⭐
-        if (a.stars < 1) {
-          breaks.push({
-            player_tag: m.tag, player_name: m.name,
-            rule: "low_stars",
-            detail: `${i === 0 ? "1st" : "2nd"} attack got 0⭐ (need 1⭐)`,
-          });
-        }
+      let flagged = false;
+
+      // early_cleanup: 2nd attack before cleanup AND below early_min_stars threshold.
+      // 3⭐ early 2nd attacks are fine (cleanup steal / loot).
+      if (ts && win !== "last_8h" && a.stars < earlyMin) {
+        breaks.push({
+          player_tag: m.tag, player_name: m.name,
+          rule: "early_cleanup",
+          attack_window: win,
+          detail: `2nd attack done in ${winLabel} got ${a.stars}⭐ (need ${earlyMin}⭐ outside cleanup)`,
+        });
+        flagged = true;
+      }
+
+      // low_stars on 2nd: only outside cleanup, only if not already flagged above.
+      if (!flagged && win !== "last_8h" && a.stars < lowMin2nd) {
+        breaks.push({
+          player_tag: m.tag, player_name: m.name,
+          rule: "low_stars",
+          attack_window: win,
+          detail: `2nd attack got ${a.stars}⭐ (need ${lowMin2nd}⭐ outside cleanup, ${winLabel})`,
+        });
       }
     }
   }
