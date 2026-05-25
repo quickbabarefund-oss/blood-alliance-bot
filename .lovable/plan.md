@@ -1,56 +1,84 @@
-# Dashboard Button Reordering
+# War Tracker — Plan
 
-Make every button on the Family Clan Dashboard reorderable: category buttons, custom info buttons, and the Clan Statistics button. Two ways to reorder — Discord slash commands (quick) and drag-and-drop in the web app (visual).
+## 1. New `/war_tracker` slash command + public web page
 
-## What you'll get
+Mirror the `/discord_link` pattern: slash command replies with a link to a hosted page that loads live data by clan tag.
 
-### Discord commands
-- `/family_category reorder` — opens an ordered picker so you can move a category up/down, or set its exact position
-- `/family_category edit … position:<n>` — set position inline when editing
-- `/family_category add … position:<n>` — choose insertion position when adding
-- `/family_info reorder`, `/family_info edit … position:<n>`, `/family_info add … position:<n>` — same for custom info buttons
-- `/family_dashboard_layout stats_position:<n> stats_enabled:<bool>` — control where the Clan Statistics button sits in the global order (or hide it)
+**Discord side**
 
-After any reorder, the dashboard message auto-refreshes.
+- New global command `/war_tracker` with optional `clan` arg (defaults to first tracked clan in the guild). When invoked, posts an ephemeral embed with a "🛡️ Open War Tracker" link button → `https://clan-loot-tracker.lovable.app/war/<clanTag>`.
+- Registered in `_shared/commands.ts`, handled in `discord-interactions/index.ts`.
 
-### Web UI (new "Family Dashboard" page)
-- Single list showing every button in render order (categories, info, stats) with its emoji + label + type badge
-- Drag handles to reorder across the whole list
-- Stats button shown as a draggable pinned row with a visibility toggle
-- "Save order" persists positions; "Preview" re-renders the dashboard in Discord
+**Web page (`/war/:clanTag`)**
+Single React page styled to match the uploaded screenshots:
 
-## Technical details
+- Header: "WAR TRACKER · SLACKER ALERT", gold/yellow display font on a dark CoC-themed background.
+- Top: tag input + "🔍 Check War" button (preloads from URL param).
+- Tabs: **Live Intel**, **War Room**, **War Debrief**, **Clan Overview**.
+- **Live Intel** — current war card (state, our/opp stars + destruction + attacks N/100), countdown, War Momentum bar (color-graded), Win Probability %, Priority Targets count, Live Feed of attacks (timestamp, attacker, stars, destruction, CLUTCH/RISKY badges).
+- **War Room** — roster (TH, map pos, used 0/2/1/2/2/2), mirror suggestions, who still owes attacks, last-8h cleanup queue.
+- **War Debrief** — last completed war: result, stars, destruction, violations grouped by player (uses same rule engine).
+- **Clan Overview** — clan badge, members, recent war history, win/loss streak.
 
-**DB migration**
-- `family_categories.position` and `family_info_messages.position` already exist — reuse them.
-- New table `family_dashboard_layout` (one row per guild): `guild_id pk`, `stats_position int default 9999`, `stats_enabled bool default true`, `updated_at`. Public read, no client writes (edge function uses service role).
-- Helper: when inserting at position N, shift existing rows `position >= N` by +1 (done in edge function, not as a trigger, to keep it scoped per-guild and per-list).
+**Data sources**
 
-**Edge function changes** (`supabase/functions/_shared/family.ts`, `discord-interactions/index.ts`, `_shared/commands.ts`, `discord-register-global-commands`)
-- Add `position` option to existing `family_category add/edit` and `family_info add/edit` subcommands.
-- Add `reorder` subcommand to both — responds with an ephemeral string-select of items; selecting an item opens a follow-up select with "Move to position 1…N". Two interactions, no modals.
-- Add `/family_dashboard_layout` command with `stats_position` and `stats_enabled` options.
-- In `buildDashboardPayload`: merge categories + infos into one array, each tagged with its `position`, then splice the stats button at `layout.stats_position` (or append if unset); only emit stats button when `stats_enabled`. Pack into rows of 5 as today.
-- After every reorder mutation, call `syncDashboardMessage(guildId)`.
+- New edge function `war-tracker-api` (verify_jwt = false) with actions: `live`, `room`, `debrief`, `overview`. Pulls from `wars`, `war_attacks`, `war_rule_breaks` and live `current_war` via the existing CoC proxy.
+- Win probability: simple heuristic — `0.5 + 0.5 * (starsDiff / (teamSize*3)) + 0.2 * (destructionDiff/100)` clamped 5–95%.
+- Momentum: `(ourRecentStars - oppRecentStars) / max` over last 6 attacks → 0–100%.
+- CLUTCH = 3⭐ on a mirror or higher; RISKY = stars < 2 outside cleanup window.
 
-**Web UI** (new route `/family-dashboard`, added to `src/components/Layout.tsx` nav)
-- Fetch categories + infos + layout for the configured guild (reuse existing guild selector pattern from other admin pages).
-- Use `@dnd-kit/core` + `@dnd-kit/sortable` (already a common pick; will add via `bun add` if missing) for the unified sortable list.
-- On drop, compute new positions and write via a new edge function `family-dashboard-reorder` (service-role; validates guild admin via Discord token like existing admin endpoints) that updates `position` columns + `family_dashboard_layout`, then calls `syncDashboardMessage`.
+## 2. Rule engine updates (`_shared/war.ts → evaluateRules`)  
+  
+Apply in WIn War and -1 stars in Lose war in all situations
 
-**Help text**
-- Update `/help` output to list the new `reorder` subcommands and `/family_dashboard_layout`.
+Add an `is16hWindow` concept: first 16h of battle day = `[startTime, startTime + 16h)`; last-8h cleanup unchanged.
 
-## Files touched
+- **early_cleanup**: only report when the 2nd attack lands **before** the last-8h window **AND** stars < 3. A 3⭐ early second hit is **fine** (loot/cleanup safe). 1⭐/2⭐ early second → still a break.
+- **low_stars** (2nd attack): trigger only outside the cleanup window with stars < 2, and skip if the same attack already produced an `early_cleanup` break (no double-report).
+- **mirror_first**: keep the rule, but always append the attack window in the detail string:  `— attacked in first-16h` or  `— attacked in last-8h cleanup`. Wording becomes e.g. `1st attack should mirror own #34 for 3⭐ — hit #1 for 3⭐ (last-8h cleanup)`.
+- Add `attack_window` field to each `RuleBreak` for the UI to color-tag.
 
-- `supabase/migrations/<ts>_family_dashboard_layout.sql` (new)
-- `supabase/functions/_shared/family.ts`
-- `supabase/functions/_shared/commands.ts`
-- `supabase/functions/discord-interactions/index.ts`
-- `supabase/functions/discord-register-global-commands/index.ts`
-- `supabase/functions/family-dashboard-reorder/index.ts` (new)
-- `src/pages/FamilyDashboard.tsx` (new) + route in `src/App.tsx` + nav entry in `src/components/Layout.tsx`
+## 3. Discord message cut-off fix
 
-## Out of scope
-- Reordering clans **within** a category (only buttons, per your scope).
-- Changing button colors/emojis from the web UI (still done via slash commands).
+`buildResultEmbeds` currently truncates the violators list with `.slice(0, 4000)`. Discord embed description max is 4096, but the full final-result post is sent as a single embed → long wars overflow.
+
+- Split violators into multiple embeds of ≤ 3800 chars each (page 2, 3, 4 …) with paginated footers.
+- `war-poll/index.ts` already calls `createMessageWithFile` once; switch to sending the file once, then follow-up `createMessage` calls for any extra violation pages so nothing is dropped.
+
+## 4. Custom per-clan rules
+
+New table `clan_war_rules` (guild_id, clan_tag, key, value):
+
+
+| key                              | default          | meaning                                                      |
+| -------------------------------- | ---------------- | ------------------------------------------------------------ |
+| `cleanup_window_hours`           | 8                | size of cleanup window from war end                          |
+| `first_window_hours`             | 16               | size of "early" window from war start                        |
+| `early_min_stars`                | 3                | min stars for an early 2nd hit to NOT break early_cleanup    |
+| `low_star_min_2nd`               | 2                | required stars on 2nd attack outside cleanup                 |
+| `mirror_first_enabled`           | true             | enforce 1st attack on mirror                                 |
+| `mirror_first_min_stars`         | 3 (win)/2 (lose) | min stars on mirror                                          |
+| `report_first_window_only_3star` | true             | when true, only report 3⭐-related issues during first window |
+
+
+- `evaluateRules` accepts an optional `rules` map and falls back to defaults.
+- `war-poll` loads rules per `(guild_id, clan_tag)` before evaluating.
+- Web page gets a small "Rules" editor in **Clan Overview** for admins (guarded by existing permission check) → writes to `clan_war_rules`.
+
+## Technical Notes
+
+- Files touched: `_shared/commands.ts`, `_shared/war.ts`, `_shared/discord.ts` (paginated follow-ups), `discord-interactions/index.ts`, `war-poll/index.ts`, new `war-tracker-api/index.ts`, new pages `src/pages/WarTracker.tsx` (+ sub-tab components), route added in `src/App.tsx`.
+- DB migration: create `clan_war_rules` with public read RLS and no public write (admin writes via edge function with service key).
+- Page is public read (matches existing leaderboard pages). Edits require Discord-verified token (reuse `embed_edit_tokens` pattern, issued by the slash command).
+- No changes to auth model; everything keyed by `guild_id` + `clan_tag` as today.
+
+## Suggested build order
+
+1. Migration for `clan_war_rules`.
+2. Rule engine changes + message pagination (fixes the cut-off and 3⭐ false positives immediately).
+3. `war-tracker-api` edge function.
+4. `/war_tracker` slash command + page link.
+5. React `WarTracker` page with the 4 tabs.
+6. Admin rules editor on **Clan Overview** tab.
+
+Confirm and I'll start with steps 1–3 (the bug-fix and rules backend) so reports stop breaking, then build the page.
