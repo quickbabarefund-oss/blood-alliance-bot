@@ -10,8 +10,9 @@ import { postCoc, normalizeTag } from "../_shared/coc.ts";
 import { createMessage, editMessage, createMessageWithFile } from "../_shared/discord.ts";
 import {
   CurrentWar, parseCocTime, isFwaMatch, buildRepsPayload, buildReminderPayload,
-  evaluateRules, buildResultEmbeds,
+  evaluateRules, buildResultEmbeds, loadClanRules,
 } from "../_shared/war.ts";
+
 
 async function fetchCurrentWar(tag: string): Promise<CurrentWar | null> {
   try {
