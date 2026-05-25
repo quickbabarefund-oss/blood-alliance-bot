@@ -32,6 +32,7 @@ const App = () => (
             <Route path="/player" element={<PlayerHistory />} />
             <Route path="/embeds" element={<EmbedEditor />} />
           </Route>
+          <Route path="/war/:clanTag" element={<WarTracker />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
