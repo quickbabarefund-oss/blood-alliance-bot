@@ -441,12 +441,15 @@ export function evaluateRules(opts: {
   });
 }
 
-// Build final result embed + page 2 + .txt log.
+// Build final result embed + paginated violator embeds + .txt log.
+// Returns:
+//   embeds      — to send with the .txt file (page 1 + up to 1 violators page)
+//   extraEmbeds — additional violator pages to send as separate follow-up messages
 export async function buildResultEmbeds(opts: {
   warRow: any;
   breaks: RuleBreak[];
   ourMembers: WarMember[];
-}): Promise<{ embeds: any[]; txt: string; content?: string }> {
+}): Promise<{ embeds: any[]; extraEmbeds: any[]; txt: string; content?: string }> {
   const w = opts.warRow;
   const violators = new Set(opts.breaks.map((b) => b.player_tag));
   const compliantCount = opts.ourMembers.length - violators.size;
@@ -462,6 +465,35 @@ export async function buildResultEmbeds(opts: {
     usedAttacks += used;
     if (used < 2) missedCount += (2 - used);
   }
+
+  // Group violators by player
+  const grouped: Record<string, RuleBreak[]> = {};
+  for (const b of opts.breaks) (grouped[b.player_tag] ??= []).push(b);
+  const violatorBlocks = Object.entries(grouped).map(([_, list]) => {
+    const head = `**${list[0].player_name}** \`${list[0].player_tag}\``;
+    const sub = list.map((b) => `• \`${b.rule}\` — ${b.detail}`).join("\n");
+    return `${head}\n${sub}`;
+  });
+
+  // Paginate violator blocks into embeds of ≤ 3800 chars each
+  const MAX = 3800;
+  const pages: string[] = [];
+  if (violatorBlocks.length === 0) {
+    pages.push("No violations 🎉");
+  } else {
+    let cur = "";
+    for (const block of violatorBlocks) {
+      const add = (cur ? "\n\n" : "") + block;
+      if (cur.length + add.length > MAX && cur) {
+        pages.push(cur);
+        cur = block;
+      } else {
+        cur += add;
+      }
+    }
+    if (cur) pages.push(cur);
+  }
+  const totalPages = 1 + pages.length;
 
   const page1: any = {
     title: `${w.clan_name ?? w.clan_tag} vs ${w.opponent_name ?? w.opponent_tag} — Final Result`,
@@ -479,25 +511,16 @@ export async function buildResultEmbeds(opts: {
       { name: "Compliant Players", value: String(compliantCount), inline: true },
       { name: "Players Breaking Rules", value: String(violators.size), inline: true },
     ],
-    footer: { text: "Page 1/2" },
+    footer: { text: `Page 1/${totalPages}` },
     timestamp: new Date().toISOString(),
   };
 
-  // Page 2: list violators
-  const grouped: Record<string, RuleBreak[]> = {};
-  for (const b of opts.breaks) (grouped[b.player_tag] ??= []).push(b);
-  const violatorLines = Object.entries(grouped).map(([_, list]) => {
-    const head = `**${list[0].player_name}** \`${list[0].player_tag}\``;
-    const sub = list.map((b) => `• \`${b.rule}\` — ${b.detail}`).join("\n");
-    return `${head}\n${sub}`;
-  });
-
-  const page2 = {
-    title: `Rule violations — ${w.clan_name ?? w.clan_tag}`,
-    description: violatorLines.length ? violatorLines.join("\n\n").slice(0, 4000) : "No violations 🎉",
+  const violatorEmbeds = pages.map((desc, i) => ({
+    title: `Rule violations — ${w.clan_name ?? w.clan_tag}${pages.length > 1 ? ` (${i + 1}/${pages.length})` : ""}`,
+    description: desc,
     color: 0xED4245,
-    footer: { text: "Page 2/2" },
-  };
+    footer: { text: `Page ${i + 2}/${totalPages}` },
+  }));
 
   // .txt log
   const lines: string[] = [];
@@ -512,11 +535,12 @@ export async function buildResultEmbeds(opts: {
     for (const [tag, list] of Object.entries(grouped)) {
       lines.push(`[${tag}] ${list[0].player_name}`);
       for (const b of list) {
-        lines.push(`  - ${b.rule}: ${b.detail} (at ${b.detected_at ?? new Date().toISOString()})`);
+        lines.push(`  - ${b.rule}: ${b.detail} (at ${(b as any).detected_at ?? new Date().toISOString()})`);
       }
     }
   }
-  // Apply guild template override for war_win / war_lose (interpolates title/description/footer/fields/content).
+
+  // Apply guild template override for war_win / war_lose
   let finalPage1: any = page1;
   let content: string | undefined;
   if (w.guild_id && (w.result === "win" || w.result === "lose")) {
@@ -536,5 +560,10 @@ export async function buildResultEmbeds(opts: {
       finalPage1 = r.embed; content = r.content;
     } catch (e) { console.error("template apply (result)", e); }
   }
-  return { embeds: [finalPage1, page2], txt: lines.join("\n"), content };
+
+  // First message carries page1 + first violator page; remainder ride in follow-up messages.
+  const firstEmbeds = violatorEmbeds.length > 0 ? [finalPage1, violatorEmbeds[0]] : [finalPage1];
+  const extraEmbeds = violatorEmbeds.slice(1);
+  return { embeds: firstEmbeds, extraEmbeds, txt: lines.join("\n"), content };
 }
+
