@@ -11,6 +11,7 @@ import Blacklist from "./pages/Blacklist";
 import Whitelist from "./pages/Whitelist";
 import PlayerHistory from "./pages/PlayerHistory";
 import EmbedEditor from "./pages/EmbedEditor";
+import WarTracker from "./pages/WarTracker";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
