@@ -172,7 +172,12 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
       for (const r of (atkRows ?? []) as any[]) {
         attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
       }
-      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers: cw.opponent.members ?? [], attackTimes });
+      const clanRules = await loadClanRules(guildId, clanTag);
+      const breaks = evaluateRules({
+        decision, startTime, endTime,
+        ourMembers, oppMembers: cw.opponent.members ?? [],
+        attackTimes, rules: clanRules,
+      });
 
       // Persist breaks
       await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
@@ -181,6 +186,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
           war_id: war.id, player_tag: b.player_tag, player_name: b.player_name, rule: b.rule, detail: b.detail,
         })));
       }
+
 
       const updatedWar = {
         ...war,
