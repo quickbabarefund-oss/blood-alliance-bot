@@ -10,8 +10,9 @@ import { postCoc, normalizeTag } from "../_shared/coc.ts";
 import { createMessage, editMessage, createMessageWithFile } from "../_shared/discord.ts";
 import {
   CurrentWar, parseCocTime, isFwaMatch, buildRepsPayload, buildReminderPayload,
-  evaluateRules, buildResultEmbeds,
+  evaluateRules, buildResultEmbeds, loadClanRules,
 } from "../_shared/war.ts";
+
 
 async function fetchCurrentWar(tag: string): Promise<CurrentWar | null> {
   try {
@@ -171,7 +172,12 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
       for (const r of (atkRows ?? []) as any[]) {
         attackTimes[`${r.attacker_tag}:${r.attack_order}`] = r.recorded_at;
       }
-      const breaks = evaluateRules({ decision, endTime, ourMembers, oppMembers: cw.opponent.members ?? [], attackTimes });
+      const clanRules = await loadClanRules(guildId, clanTag);
+      const breaks = evaluateRules({
+        decision, startTime, endTime,
+        ourMembers, oppMembers: cw.opponent.members ?? [],
+        attackTimes, rules: clanRules,
+      });
 
       // Persist breaks
       await sb.from("war_rule_breaks").delete().eq("war_id", war.id);
@@ -181,14 +187,18 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
         })));
       }
 
+
       const updatedWar = {
         ...war,
         result, our_stars: ourStars, opp_stars: oppStars,
         our_destruction: ourDes, opp_destruction: oppDes,
       };
-      const { embeds, txt, content } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
+      const { embeds, extraEmbeds, txt, content } = await buildResultEmbeds({ warRow: updatedWar, breaks, ourMembers });
       const filename = `war-${(war.clan_tag).replace("#", "")}-vs-${(war.opponent_tag).replace("#", "")}-${startTime.toISOString().slice(0, 10)}.txt`;
       const msgId = await createMessageWithFile(cfg.log_channel_id, filename, new TextEncoder().encode(txt), { embeds, content });
+      for (const extra of extraEmbeds) {
+        await createMessage(cfg.log_channel_id, { embeds: [extra] });
+      }
 
       await sb.from("wars").update({
         result, our_stars: ourStars, opp_stars: oppStars,

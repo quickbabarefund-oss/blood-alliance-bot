@@ -11,6 +11,7 @@ import Blacklist from "./pages/Blacklist";
 import Whitelist from "./pages/Whitelist";
 import PlayerHistory from "./pages/PlayerHistory";
 import EmbedEditor from "./pages/EmbedEditor";
+import WarTracker from "./pages/WarTracker";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/player" element={<PlayerHistory />} />
             <Route path="/embeds" element={<EmbedEditor />} />
           </Route>
+          <Route path="/war/:clanTag" element={<WarTracker />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

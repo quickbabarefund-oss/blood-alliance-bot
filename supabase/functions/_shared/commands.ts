@@ -507,4 +507,12 @@ export const COMMANDS: any[] = [
       { type: USER, name: "user", description: "Discord user (defaults to you)" },
     ],
   },
+  {
+    name: "war_tracker",
+    description: "Open the live War Tracker dashboard for a clan",
+    options: [
+      { type: STRING, name: "clan", description: "Clan tag (defaults to first tracked clan)", autocomplete: true },
+    ],
+  },
 ];
+

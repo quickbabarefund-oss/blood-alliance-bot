@@ -62,6 +62,33 @@ export type Database = {
         }
         Relationships: []
       }
+      clan_war_rules: {
+        Row: {
+          clan_tag: string
+          guild_id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string
+        }
+        Insert: {
+          clan_tag: string
+          guild_id: string
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: string
+        }
+        Update: {
+          clan_tag?: string
+          guild_id?: string
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       clans: {
         Row: {
           active: boolean

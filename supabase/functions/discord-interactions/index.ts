@@ -1823,6 +1823,52 @@ async function handleMyr(interaction: any): Promise<Response> {
   return deferred(true);
 }
 
+async function handleWarTracker(interaction: any): Promise<Response> {
+  const options = interaction.data?.options ?? [];
+  const guildId = interaction.guild_id ?? "";
+  let tag = String(getOpt(options, "clan") ?? "").trim().toUpperCase();
+  if (tag && !tag.startsWith("#")) tag = "#" + tag;
+
+  if (!tag && guildId) {
+    const sb = adminClient();
+    const { data } = await sb.from("war_track_config")
+      .select("clan_tag").eq("guild_id", guildId).limit(1).maybeSingle();
+    if (data?.clan_tag) tag = data.clan_tag;
+    if (!tag) {
+      const { data: c } = await sb.from("clans")
+        .select("tag").eq("guild_id", guildId).limit(1).maybeSingle();
+      if (c?.tag) tag = c.tag;
+    }
+  }
+  if (!tag) {
+    return reply("⚠️ No clans tracked yet. Add one with `/clan add` or `/war_track setup`, or pass a clan tag.", true);
+  }
+
+  const tagNoHash = tag.replace(/^#/, "");
+  const url = `${PUBLIC_APP_URL}/war/${encodeURIComponent(tagNoHash)}?guild=${encodeURIComponent(guildId)}`;
+  return new Response(JSON.stringify({
+    type: 4,
+    data: {
+      flags: 64,
+      embeds: [{
+        title: "🛡️ War Tracker · Slacker Alert",
+        description: `Live war intel, debrief, and roster for **\`${tag}\`**.\nTap the button below to open the dashboard.`,
+        color: 0xF1B93B,
+      }],
+      components: [{
+        type: 1,
+        components: [{
+          type: 2, style: 5, // LINK button
+          label: "🔍 Open War Tracker",
+          url,
+        }],
+      }],
+    },
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
+
+
 
 Deno.serve(async (req) => {
 
@@ -2203,6 +2249,8 @@ Deno.serve(async (req) => {
         case "embed_editor": return await handleEmbedEditor(interaction);
         case "discord_link": return await handleDiscordLink(interaction);
         case "myr": return await handleMyr(interaction);
+        case "war_tracker": return await handleWarTracker(interaction);
+
         case "help": return handleHelp(interaction);
         case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
         case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
