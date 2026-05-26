@@ -1,9 +1,34 @@
 // Scheduled every 5 minutes. Polls every active clan, snapshots donations,
 // updates monthly aggregates with deltas, then refreshes Discord leaderboards.
 import { corsHeaders } from "../_shared/cors.ts";
-import { fetchClan, normalizeTag } from "../_shared/coc.ts";
+import { fetchClan, fetchPlayer, normalizeTag } from "../_shared/coc.ts";
 import { adminClient, refreshAllDiscordMessages } from "../_shared/leaderboard.ts";
 import { istMonthKey } from "../_shared/month.ts";
+
+// Fetch per-player stats in parallel batches. The clan endpoint's memberList
+// does NOT include attackWins/defenseWins, so we hydrate from /players/{tag}.
+async function fetchMemberStats(tags: string[]): Promise<Map<string, { attackWins: number; defenseWins: number }>> {
+  const out = new Map<string, { attackWins: number; defenseWins: number }>();
+  const CONCURRENCY = 6;
+  let i = 0;
+  async function worker() {
+    while (i < tags.length) {
+      const idx = i++;
+      const t = tags[idx];
+      try {
+        const p: any = await fetchPlayer(t);
+        out.set(t, {
+          attackWins: Number(p?.attackWins ?? 0),
+          defenseWins: Number(p?.defenseWins ?? 0),
+        });
+      } catch (e) {
+        console.error("fetchPlayer failed", t, e instanceof Error ? e.message : e);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tags.length) }, worker));
+  return out;
+}
 
 async function pollOne(clanTag: string) {
   const sb = adminClient();
