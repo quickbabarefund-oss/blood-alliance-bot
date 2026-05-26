@@ -1,9 +1,34 @@
 // Scheduled every 5 minutes. Polls every active clan, snapshots donations,
 // updates monthly aggregates with deltas, then refreshes Discord leaderboards.
 import { corsHeaders } from "../_shared/cors.ts";
-import { fetchClan, normalizeTag } from "../_shared/coc.ts";
+import { fetchClan, fetchPlayer, normalizeTag } from "../_shared/coc.ts";
 import { adminClient, refreshAllDiscordMessages } from "../_shared/leaderboard.ts";
 import { istMonthKey } from "../_shared/month.ts";
+
+// Fetch per-player stats in parallel batches. The clan endpoint's memberList
+// does NOT include attackWins/defenseWins, so we hydrate from /players/{tag}.
+async function fetchMemberStats(tags: string[]): Promise<Map<string, { attackWins: number; defenseWins: number }>> {
+  const out = new Map<string, { attackWins: number; defenseWins: number }>();
+  const CONCURRENCY = 6;
+  let i = 0;
+  async function worker() {
+    while (i < tags.length) {
+      const idx = i++;
+      const t = tags[idx];
+      try {
+        const p: any = await fetchPlayer(t);
+        out.set(t, {
+          attackWins: Number(p?.attackWins ?? 0),
+          defenseWins: Number(p?.defenseWins ?? 0),
+        });
+      } catch (e) {
+        console.error("fetchPlayer failed", t, e instanceof Error ? e.message : e);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tags.length) }, worker));
+  return out;
+}
 
 async function pollOne(clanTag: string) {
   const sb = adminClient();
@@ -47,13 +72,18 @@ async function pollOne(clanTag: string) {
       }
     }
 
+    // Hydrate per-player attack/defense wins (not present in clan memberList).
+    const memberTags = members.map((m: any) => normalizeTag(m.tag));
+    const stats = await fetchMemberStats(memberTags);
+
     // For each member: upsert player, snapshot, compute delta vs last snapshot, update aggregate
     for (const m of members) {
       const ptag = normalizeTag(m.tag);
       const donated = m.donations ?? 0;
       const recv = m.donationsReceived ?? 0;
-      const atkWins = (m as any).attackWins ?? 0;
-      const defWins = (m as any).defenseWins ?? 0;
+      const ps = stats.get(ptag);
+      const atkWins = ps?.attackWins ?? 0;
+      const defWins = ps?.defenseWins ?? 0;
 
       // Join detection
       if (!prevTags.has(ptag)) {
