@@ -72,13 +72,18 @@ async function pollOne(clanTag: string) {
       }
     }
 
+    // Hydrate per-player attack/defense wins (not present in clan memberList).
+    const memberTags = members.map((m: any) => normalizeTag(m.tag));
+    const stats = await fetchMemberStats(memberTags);
+
     // For each member: upsert player, snapshot, compute delta vs last snapshot, update aggregate
     for (const m of members) {
       const ptag = normalizeTag(m.tag);
       const donated = m.donations ?? 0;
       const recv = m.donationsReceived ?? 0;
-      const atkWins = (m as any).attackWins ?? 0;
-      const defWins = (m as any).defenseWins ?? 0;
+      const ps = stats.get(ptag);
+      const atkWins = ps?.attackWins ?? 0;
+      const defWins = ps?.defenseWins ?? 0;
 
       // Join detection
       if (!prevTags.has(ptag)) {
