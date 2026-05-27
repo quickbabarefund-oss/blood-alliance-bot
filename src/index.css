@@ -2,52 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CoC Alliance Donation Tracker — dark stone & gold theme. All colors HSL. */
+/* Alliance Command Center — Emerald Prestige.
+   Deep emerald foundations with gold authority accents. All colors HSL. */
 
 @layer base {
   :root {
-    --background: 222 30% 7%;
-    --foreground: 40 30% 92%;
+    --background: 160 60% 5%;
+    --foreground: 45 40% 94%;
 
-    --card: 222 28% 10%;
-    --card-foreground: 40 30% 92%;
+    --card: 162 45% 8%;
+    --card-foreground: 45 40% 94%;
 
-    --popover: 222 28% 10%;
-    --popover-foreground: 40 30% 92%;
+    --popover: 162 45% 8%;
+    --popover-foreground: 45 40% 94%;
 
-    --primary: 42 92% 56%;
-    --primary-foreground: 222 40% 8%;
+    --primary: 44 60% 54%;            /* gold */
+    --primary-foreground: 162 55% 8%;
 
-    --secondary: 222 22% 16%;
-    --secondary-foreground: 40 30% 92%;
+    --secondary: 162 35% 12%;
+    --secondary-foreground: 45 40% 94%;
 
-    --muted: 222 18% 14%;
-    --muted-foreground: 40 12% 65%;
+    --muted: 162 28% 11%;
+    --muted-foreground: 45 15% 70%;
 
-    --accent: 30 90% 52%;
-    --accent-foreground: 222 40% 8%;
+    --accent: 160 55% 28%;            /* emerald */
+    --accent-foreground: 45 50% 96%;
 
     --destructive: 0 72% 51%;
-    --destructive-foreground: 40 30% 95%;
+    --destructive-foreground: 45 40% 96%;
 
-    --border: 222 20% 18%;
-    --input: 222 20% 18%;
-    --ring: 42 92% 56%;
+    --success: 152 65% 40%;
+    --warning: 38 92% 55%;
 
-    --radius: 0.6rem;
+    --border: 162 30% 15%;
+    --input: 162 30% 15%;
+    --ring: 44 60% 54%;
 
-    --sidebar-background: 222 28% 10%;
-    --sidebar-foreground: 40 30% 92%;
-    --sidebar-primary: 42 92% 56%;
-    --sidebar-primary-foreground: 222 40% 8%;
-    --sidebar-accent: 222 22% 16%;
-    --sidebar-accent-foreground: 40 30% 92%;
-    --sidebar-border: 222 20% 18%;
-    --sidebar-ring: 42 92% 56%;
+    --radius: 0.7rem;
 
-    --gradient-hero: linear-gradient(135deg, hsl(42 92% 56% / 0.18), hsl(30 90% 52% / 0.06) 60%, transparent);
-    --gradient-gold: linear-gradient(135deg, hsl(42 92% 56%), hsl(30 90% 52%));
-    --shadow-gold: 0 10px 40px -10px hsl(42 92% 56% / 0.4);
+    --sidebar-background: 162 50% 7%;
+    --sidebar-foreground: 45 30% 88%;
+    --sidebar-primary: 44 60% 54%;
+    --sidebar-primary-foreground: 162 55% 8%;
+    --sidebar-accent: 162 38% 12%;
+    --sidebar-accent-foreground: 45 50% 96%;
+    --sidebar-border: 162 30% 13%;
+    --sidebar-ring: 44 60% 54%;
+
+    --gradient-hero: radial-gradient(ellipse at top, hsl(160 55% 18% / 0.6), transparent 65%);
+    --gradient-gold: linear-gradient(135deg, hsl(44 70% 60%), hsl(38 65% 48%));
+    --gradient-emerald: linear-gradient(135deg, hsl(160 60% 22%), hsl(162 55% 12%));
+    --shadow-gold: 0 10px 40px -12px hsl(44 60% 54% / 0.45);
+    --shadow-emerald: 0 18px 50px -18px hsl(160 70% 14% / 0.8);
   }
 }
 
@@ -56,13 +62,21 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    background-image:
+      radial-gradient(circle at 18% 12%, hsl(160 60% 14% / 0.55), transparent 45%),
+      radial-gradient(circle at 82% 88%, hsl(44 60% 30% / 0.18), transparent 50%);
+    background-attachment: fixed;
   }
-  h1, h2, h3 { font-family: 'Cinzel', 'Georgia', serif; letter-spacing: 0.01em; }
+  h1, h2, h3 { font-family: 'Cormorant Garamond', 'Georgia', serif; letter-spacing: 0.005em; font-weight: 600; }
 }
 
 @layer utilities {
   .text-gold { color: hsl(var(--primary)); }
+  .text-emerald { color: hsl(var(--accent)); }
   .bg-gold-gradient { background: var(--gradient-gold); }
-  .ring-gold { box-shadow: var(--shadow-gold); }
+  .bg-emerald-gradient { background: var(--gradient-emerald); }
   .bg-hero-gradient { background: var(--gradient-hero); }
+  .ring-gold { box-shadow: var(--shadow-gold); }
+  .shadow-emerald { box-shadow: var(--shadow-emerald); }
+  .border-gold { border-color: hsl(var(--primary) / 0.4); }
 }
