@@ -39,8 +39,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AdminAuthProvider>
-      </Toaster>
-    </BrowserRouter>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
