@@ -33,7 +33,7 @@ const App = () => (
               <Route path="/player" element={<PlayerHistory />} />
               <Route path="/blacklist" element={<AdminGate title="Unlock to view & manage the blacklist."><Blacklist /></AdminGate>} />
               <Route path="/whitelist" element={<AdminGate title="Unlock to view & manage the whitelist."><Whitelist /></AdminGate>} />
-              <Route path="/embeds" element={<AdminGate title="Unlock to edit Discord embeds."><EmbedEditor /></AdminGate>} />
+              <Route path="/embeds" element={<EmbedEditor />} />
             </Route>
             <Route path="/war/:clanTag" element={<WarTracker />} />
             <Route path="*" element={<NotFound />} />

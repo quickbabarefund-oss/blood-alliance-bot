@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Crown, Shield, Ban, ListChecks, History, Sparkles, Swords, LogOut } from "lucide-react";
+import { Crown, Shield, Ban, ListChecks, History, Swords, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -25,7 +25,6 @@ const publicLinks = [
 const adminLinks = [
   { to: "/blacklist", label: "Blacklist", icon: Ban },
   { to: "/whitelist", label: "Whitelist", icon: ListChecks },
-  { to: "/embeds", label: "Embed Editor", icon: Sparkles },
 ];
 
 export function AppSidebar() {
