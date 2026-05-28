@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, Users } from "lucide-react";
+import { Shield, Users, Swords } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 
 type Clan = {
@@ -35,12 +35,11 @@ export default function ClansRegistry() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {clans.map((c) => (
-          <Link
+          <div
             key={c.tag}
-            to={`/clan/${encodeURIComponent(c.tag)}`}
             className="group rounded-lg border border-border bg-card p-5 transition-all hover:border-primary/60 hover:ring-gold"
           >
-            <div className="flex items-center gap-3">
+            <Link to={`/clan/${encodeURIComponent(c.tag)}`} className="flex items-center gap-3">
               {c.badge_url ? (
                 <img src={c.badge_url} alt={c.name} className="h-14 w-14 rounded" loading="lazy" />
               ) : (
@@ -50,12 +49,18 @@ export default function ClansRegistry() {
                 <div className="font-semibold text-foreground group-hover:text-gold truncate">{c.name || c.tag}</div>
                 <div className="text-xs text-muted-foreground">{c.tag}</div>
               </div>
-            </div>
+            </Link>
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{c.member_count} members</span>
               <span>Updated {timeAgo(c.last_polled_at)}</span>
             </div>
-          </Link>
+            <Link
+              to={`/war/${encodeURIComponent(c.tag)}`}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20"
+            >
+              <Swords className="h-3.5 w-3.5" /> Live War Tracker
+            </Link>
+          </div>
         ))}
       </div>
     </div>

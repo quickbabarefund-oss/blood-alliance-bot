@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DataTable } from "@/components/DataTable";
 import { istMonthKey, pastMonthKeys } from "@/lib/format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Crown, Trophy } from "lucide-react";
+import { Crown, Trophy, Swords, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 
 type Row = {
@@ -15,11 +15,23 @@ type Row = {
   clan_name?: string;
 };
 
+type WarClan = { tag: string; name: string; badge_url: string | null };
+
 export default function GlobalLeaderboard() {
   const [month, setMonth] = useState<string>(istMonthKey());
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [warClans, setWarClans] = useState<WarClan[]>([]);
   const months = useMemo(() => pastMonthKeys(12), []);
+
+  useEffect(() => {
+    supabase
+      .from("clans")
+      .select("tag,name,badge_url")
+      .eq("active", true)
+      .order("name")
+      .then(({ data }) => setWarClans((data as WarClan[]) ?? []));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -80,6 +92,35 @@ export default function GlobalLeaderboard() {
           <Stat label="Top Amount" value={(rows[0]?.donations ?? 0).toLocaleString()} />
         </div>
       </section>
+
+      {warClans.length > 0 && (
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Swords className="h-4 w-4 text-gold" />
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-gold">Live War Trackers</h2>
+            </div>
+            <Link to="/clans" className="text-xs text-muted-foreground hover:text-gold">All clans →</Link>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {warClans.map((c) => (
+              <Link
+                key={c.tag}
+                to={`/war/${encodeURIComponent(c.tag)}`}
+                className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-gold/20 hover:text-gold"
+              >
+                {c.badge_url ? (
+                  <img src={c.badge_url} alt="" className="h-4 w-4 rounded" loading="lazy" />
+                ) : (
+                  <Shield className="h-3.5 w-3.5" />
+                )}
+                <span>{c.name || c.tag}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
 
       <DataTable
         rows={rows}
