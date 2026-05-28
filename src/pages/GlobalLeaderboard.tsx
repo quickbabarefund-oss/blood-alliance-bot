@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DataTable } from "@/components/DataTable";
 import { istMonthKey, pastMonthKeys } from "@/lib/format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Crown, Trophy } from "lucide-react";
+import { Crown, Trophy, Swords, Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 
 type Row = {
@@ -15,11 +15,23 @@ type Row = {
   clan_name?: string;
 };
 
+type WarClan = { tag: string; name: string; badge_url: string | null };
+
 export default function GlobalLeaderboard() {
   const [month, setMonth] = useState<string>(istMonthKey());
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [warClans, setWarClans] = useState<WarClan[]>([]);
   const months = useMemo(() => pastMonthKeys(12), []);
+
+  useEffect(() => {
+    supabase
+      .from("clans")
+      .select("tag,name,badge_url")
+      .eq("active", true)
+      .order("name")
+      .then(({ data }) => setWarClans((data as WarClan[]) ?? []));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
