@@ -93,6 +93,35 @@ export default function GlobalLeaderboard() {
         </div>
       </section>
 
+      {warClans.length > 0 && (
+        <section className="rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Swords className="h-4 w-4 text-gold" />
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-gold">Live War Trackers</h2>
+            </div>
+            <Link to="/clans" className="text-xs text-muted-foreground hover:text-gold">All clans →</Link>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {warClans.map((c) => (
+              <Link
+                key={c.tag}
+                to={`/war/${encodeURIComponent(c.tag)}`}
+                className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-gold/20 hover:text-gold"
+              >
+                {c.badge_url ? (
+                  <img src={c.badge_url} alt="" className="h-4 w-4 rounded" loading="lazy" />
+                ) : (
+                  <Shield className="h-3.5 w-3.5" />
+                )}
+                <span>{c.name || c.tag}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+
       <DataTable
         rows={rows}
         defaultSort={{ key: "donations", dir: "desc" }}
