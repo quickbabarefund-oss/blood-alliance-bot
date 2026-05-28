@@ -404,16 +404,18 @@ async function handleWarTrackSetup(interaction: any) {
   const opts = interaction.data.options ?? [];
   const clanTag = normalizeTag(getOpt(opts, "clan_tag"));
   const sb = adminClient();
+  const mailChan = getOpt(opts, "mail_channel");
+  const mailRole = getOpt(opts, "mail_ping_role");
   await sb.from("war_track_config").upsert({
     guild_id: guildId, clan_tag: clanTag,
     rep_channel_id: String(getOpt(opts, "rep_channel")),
     rep_role_id: String(getOpt(opts, "rep_role")),
-    mail_channel_id: String(getOpt(opts, "mail_channel")),
-    mail_ping_role_id: String(getOpt(opts, "mail_ping_role")),
+    mail_channel_id: mailChan ? String(mailChan) : null,
+    mail_ping_role_id: mailRole ? String(mailRole) : null,
     log_channel_id: getOpt(opts, "log_channel") ? String(getOpt(opts, "log_channel")) : null,
     updated_at: new Date().toISOString(),
   }, { onConflict: "guild_id,clan_tag" });
-  return reply(`✅ War tracking configured for \`${clanTag}\`.\n• Rep channel: <#${getOpt(opts, "rep_channel")}>\n• Mail channel: <#${getOpt(opts, "mail_channel")}>\n${getOpt(opts, "log_channel") ? `• Log channel: <#${getOpt(opts, "log_channel")}>` : "⚠️ Set a log channel via `/setup_war_log_channel` for reminders & results."}`);
+  return reply(`✅ War tracking configured for \`${clanTag}\`.\n• Rep channel: <#${getOpt(opts, "rep_channel")}>\n• Mail channel: ${mailChan ? `<#${mailChan}>` : "_(disabled — optional)_"}\n${getOpt(opts, "log_channel") ? `• Log channel: <#${getOpt(opts, "log_channel")}>` : "⚠️ Set a log channel via `/setup_war_log_channel` for reminders & results."}`);
 }
 
 async function handleSetupWarLogChannel(interaction: any) {
@@ -488,7 +490,7 @@ async function handleWarTrackList(interaction: any) {
     const parts = [
       `• **\`${c.clan_tag}\`**`,
       `Rep: <#${c.rep_channel_id}> (<@&${c.rep_role_id}>)`,
-      `Mail: <#${c.mail_channel_id}> (<@&${c.mail_ping_role_id}>)`,
+      c.mail_channel_id ? `Mail: <#${c.mail_channel_id}>${c.mail_ping_role_id ? ` (<@&${c.mail_ping_role_id}>)` : ""}` : "Mail: _(disabled)_",
       c.log_channel_id ? `Log: <#${c.log_channel_id}>` : "Log: ⚠️ not set",
     ];
     return parts.join(" · ");

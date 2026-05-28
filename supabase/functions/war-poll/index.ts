@@ -12,6 +12,7 @@ import {
   CurrentWar, parseCocTime, isFwaMatch, buildRepsPayload, buildReminderPayload,
   evaluateRules, buildResultEmbeds, loadClanRules,
 } from "../_shared/war.ts";
+import { fetchFwaRecommendation } from "../_shared/fwa_points.ts";
 
 
 async function fetchCurrentWar(tag: string): Promise<CurrentWar | null> {
@@ -86,6 +87,64 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
   // ---- Battle day actions ----
   if (cw.state === "inWar") {
     const now = new Date();
+
+    // Auto-apply FWA win/lose recommendation if reps didn't decide before battle day.
+    // Only runs for FWA matches; pulls from https://points.fwafarm.com/clan?tag=...
+    if (!war.decision && (war.match_type ?? "").toUpperCase() === "FWA") {
+      try {
+        const rec = await fetchFwaRecommendation(clanTag);
+        if (rec) {
+          const decidedAt = new Date().toISOString();
+          await sb.from("wars").update({
+            decision: rec.decision,
+            decided_by: "auto-fwa",
+            decided_at: decidedAt,
+            updated_at: decidedAt,
+          }).eq("id", war.id);
+          war.decision = rec.decision;
+          war.decided_by = "auto-fwa";
+          war.decided_at = decidedAt;
+
+          // Patch the reps approval message (if any) to show it was auto-decided.
+          if (war.rep_message_id && cfg.rep_channel_id) {
+            try {
+              await editMessage(cfg.rep_channel_id, war.rep_message_id, {
+                components: [{
+                  type: 1,
+                  components: [{
+                    type: 3,
+                    custom_id: `war:auto:${war.id}`,
+                    placeholder: `Auto-decided: ${rec.decision.toUpperCase()} (FWA · ${rec.reason})`,
+                    disabled: true,
+                    options: [{ label: "Auto-decided", value: "x" }],
+                  }],
+                }],
+              });
+            } catch (e) { console.error("patch rep msg (auto)", e); }
+          }
+
+          // Mail-room announcement — optional; skipped when mail_channel_id is null.
+          if (cfg.mail_channel_id) {
+            const tpl = (rec.decision === "win" ? cfg.win_announcement : cfg.lose_announcement)
+              ?? (rec.decision === "win"
+                ? "🏆 {ping} — Auto-picked **WIN** vs **{opponent}** ({opp_tag}). _(FWA points: {reason})_"
+                : "🏳️ {ping} — Auto-picked **LOSE** vs **{opponent}** ({opp_tag}). _(FWA points: {reason})_");
+            const ping = cfg.mail_ping_role_id ? `<@&${cfg.mail_ping_role_id}>` : "";
+            const content = tpl
+              .replaceAll("{opponent}", war.opponent_name ?? war.opponent_tag)
+              .replaceAll("{opp_tag}", war.opponent_tag)
+              .replaceAll("{our}", war.clan_name ?? war.clan_tag)
+              .replaceAll("{our_tag}", war.clan_tag)
+              .replaceAll("{ping}", ping)
+              .replaceAll("{reason}", rec.reason);
+            try {
+              await createMessage(cfg.mail_channel_id, { content, allowed_mentions: { parse: ["roles"] } });
+            } catch (e) { console.error("mail-room auto-post failed", war.id, e); }
+          }
+        }
+      } catch (e) { console.error("auto-fwa decide failed", war.id, e); }
+    }
+
 
     // war-started msg
     if (!war.war_started_msg_sent && cfg.log_channel_id && now >= startTime) {

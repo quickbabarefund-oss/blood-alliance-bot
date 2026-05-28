@@ -133,7 +133,7 @@ export async function buildRepsPayload(opts: {
       { name: `${ours.name} Composition`, value: compositionLine(ours.members, thMap), inline: false },
       { name: `${opp.name} Composition`, value: compositionLine(opp.members, thMap), inline: false },
     ],
-    footer: { text: "Reps: please select Win or Lose to lock in the strategy." },
+    footer: { text: "Reps: select Win or Lose to lock in strategy. If unset before battle day, FWA points auto-picks for FWA matches." },
     timestamp: new Date().toISOString(),
   };
 
