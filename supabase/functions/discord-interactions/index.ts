@@ -490,7 +490,7 @@ async function handleWarTrackList(interaction: any) {
     const parts = [
       `• **\`${c.clan_tag}\`**`,
       `Rep: <#${c.rep_channel_id}> (<@&${c.rep_role_id}>)`,
-      `Mail: <#${c.mail_channel_id}> (<@&${c.mail_ping_role_id}>)`,
+      c.mail_channel_id ? `Mail: <#${c.mail_channel_id}>${c.mail_ping_role_id ? ` (<@&${c.mail_ping_role_id}>)` : ""}` : "Mail: _(disabled)_",
       c.log_channel_id ? `Log: <#${c.log_channel_id}>` : "Log: ⚠️ not set",
     ];
     return parts.join(" · ");

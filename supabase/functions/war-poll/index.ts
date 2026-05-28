@@ -12,6 +12,7 @@ import {
   CurrentWar, parseCocTime, isFwaMatch, buildRepsPayload, buildReminderPayload,
   evaluateRules, buildResultEmbeds, loadClanRules,
 } from "../_shared/war.ts";
+import { fetchFwaRecommendation } from "../_shared/fwa_points.ts";
 
 
 async function fetchCurrentWar(tag: string): Promise<CurrentWar | null> {
