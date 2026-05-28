@@ -35,7 +35,7 @@ const App = () => (
               <Route path="/whitelist" element={<AdminGate title="Unlock to view & manage the whitelist."><Whitelist /></AdminGate>} />
               <Route path="/embeds" element={<EmbedEditor />} />
             </Route>
-            <Route path="/war/:clanTag" element={<AdminGate title="Unlock to view the war tracker."><WarTracker /></AdminGate>} />
+            <Route path="/war/:clanTag" element={<WarTracker />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AdminAuthProvider>
