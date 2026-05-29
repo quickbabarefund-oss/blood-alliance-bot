@@ -133,25 +133,25 @@ export async function buildRepsPayload(opts: {
       { name: `${ours.name} Composition`, value: compositionLine(ours.members, thMap), inline: false },
       { name: `${opp.name} Composition`, value: compositionLine(opp.members, thMap), inline: false },
     ],
-    footer: { text: "Reps: select Win or Lose to lock in strategy. If unset before battle day, FWA points auto-picks for FWA matches." },
+    footer: { text: "Reps: pick WIN / LOSE / MISS. Re-clickable any time before war ends. If unset before battle day, FWA points auto-picks for FWA matches." },
     timestamp: new Date().toISOString(),
   };
 
-  const select = {
-    type: 1,
-    components: [{
-      type: 3, // STRING_SELECT
-      custom_id: `war:decide:${opts.warId}`,
-      placeholder: "Select Win or Lose",
-      min_values: 1, max_values: 1,
-      options: [
-        { label: "Win this war", value: "win", emoji: { name: "🏆" } },
-        { label: "Lose this war", value: "lose", emoji: { name: "🏳️" } },
-      ],
-    }],
-  };
+  const buttons = buildDecisionButtons(opts.warId);
+  return { embeds: [embed], components: [buttons] };
+}
 
-  return { embeds: [embed], components: [select] };
+// Reusable WIN / LOSE / MISS button row used for the reps approval message.
+// Buttons stay enabled while the war is active so admins can override at any time.
+export function buildDecisionButtons(warId: number) {
+  return {
+    type: 1,
+    components: [
+      { type: 2, style: 3, custom_id: `war:set:${warId}:win`,  label: "WIN",  emoji: { name: "🏆" } },
+      { type: 2, style: 4, custom_id: `war:set:${warId}:lose`, label: "LOSE", emoji: { name: "🏳️" } },
+      { type: 2, style: 2, custom_id: `war:set:${warId}:miss`, label: "MISS", emoji: { name: "🚫" } },
+    ],
+  };
 }
 
 // Build a war-started or reminder message as plain content (so mentions actually ping users).
