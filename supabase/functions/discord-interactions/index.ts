@@ -983,80 +983,148 @@ function handleHelp(_interaction: any): Response {
   });
 }
 
-// War decision select menu handler (custom_id: war:decide:<war_id>)
-async function handleWarDecide(interaction: any): Promise<Response> {
+// Apply a war decision (win/lose/miss): writes to DB, patches reps message, posts mail-room note.
+// Returns a user-facing string about what happened.
+async function applyWarDecision(opts: {
+  warId: number;
+  choice: "win" | "lose" | "miss";
+  guildId: string;
+  decidedBy: string;
+  decidedByDisplay: string;
+}): Promise<{ ok: boolean; message: string }> {
   const sb = adminClient();
-  const cid: string = interaction.data?.custom_id ?? "";
-  const warId = parseInt(cid.split(":")[2], 10);
-  const choice = interaction.data?.values?.[0]; // "win" | "lose"
-  if (!warId || !["win", "lose"].includes(choice)) {
-    return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
-  }
-
-  const { data: war } = await sb.from("wars").select("*").eq("id", warId).maybeSingle();
-  if (!war) return reply("⚠️ This war is no longer being tracked.");
+  const { data: war } = await sb.from("wars").select("*").eq("id", opts.warId).maybeSingle();
+  if (!war) return { ok: false, message: "⚠️ This war is no longer being tracked." };
+  if (war.guild_id !== opts.guildId) return { ok: false, message: "⚠️ This war belongs to another server." };
+  if (war.result_posted) return { ok: false, message: "⚠️ This war has already ended — decision is locked." };
 
   const { data: cfg } = await sb.from("war_track_config")
     .select("*").eq("guild_id", war.guild_id).eq("clan_tag", war.clan_tag).maybeSingle();
 
-  // Permission: must have rep_role_id
-  const memberRoles: string[] = interaction.member?.roles ?? [];
-  const repRole = cfg?.rep_role_id;
-  const allowed = (repRole && memberRoles.includes(repRole)) || (BigInt(interaction.member?.permissions ?? "0") & 0x8n) === 0x8n;
-  if (!allowed) return reply(`⛔ Only members with <@&${repRole ?? "rep_role"}> can decide this war.`);
-
-  const userId = callerUserId(interaction);
+  const prevDecision = war.decision as string | null;
   await sb.from("wars").update({
-    decision: choice, decided_by: userId, decided_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  }).eq("id", warId);
+    decision: opts.choice,
+    decided_by: opts.decidedBy,
+    decided_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", opts.warId);
 
-  // Edit the original rep message: disable select + add footer
-  if (war.rep_message_id) {
+  // Patch the reps approval message: keep buttons enabled, update footer.
+  if (war.rep_message_id && cfg?.rep_channel_id) {
     try {
-      const updated = JSON.parse(JSON.stringify(interaction.message ?? {}));
-      const embed = (updated.embeds ?? [{}])[0] ?? {};
-      embed.footer = { text: `Decided: ${choice.toUpperCase()} by ${interaction.member?.user?.username ?? "—"}` };
-      await fetch(`https://discord.com/api/v10/channels/${interaction.channel_id}/messages/${war.rep_message_id}`, {
+      // Re-fetch the existing message to preserve embed content.
+      const msgRes = await fetch(
+        `https://discord.com/api/v10/channels/${cfg.rep_channel_id}/messages/${war.rep_message_id}`,
+        { headers: { Authorization: `Bot ${Deno.env.get("DISCORD_BOT_TOKEN")}` } },
+      );
+      const msg = msgRes.ok ? await msgRes.json() : { embeds: [{}] };
+      const embed = (msg.embeds ?? [{}])[0] ?? {};
+      embed.footer = { text: `Decision: ${opts.choice.toUpperCase()} — set by ${opts.decidedByDisplay}. Re-clickable until war ends.` };
+      const { buildDecisionButtons } = await import("../_shared/war.ts");
+      await fetch(`https://discord.com/api/v10/channels/${cfg.rep_channel_id}/messages/${war.rep_message_id}`, {
         method: "PATCH",
         headers: { Authorization: `Bot ${Deno.env.get("DISCORD_BOT_TOKEN")}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           embeds: [embed],
-          components: [{ type: 1, components: [{
-            type: 3, custom_id: `war:decided:${warId}`, placeholder: `Decided: ${choice.toUpperCase()}`,
-            disabled: true, options: [{ label: "Decided", value: "x" }],
-          }]}],
+          components: [buildDecisionButtons(opts.warId)],
         }),
       });
     } catch (e) { console.error("edit rep msg failed", e); }
   }
 
-  // Mail-room announcement
+  // Mail-room announcement (optional channel). Skip for MISS unless a custom template is set.
   if (cfg?.mail_channel_id) {
-    const tpl = (choice === "win" ? cfg.win_announcement : cfg.lose_announcement)
-      ?? (choice === "win"
-        ? "🏆 {ping} — We're going for the **WIN** vs **{opponent}** ({opp_tag})! Mirror first attack 3⭐, ≥2⭐ in first 16h, 3⭐ in last 8h."
-        : "🏳️ {ping} — We're **LOSING** vs **{opponent}** ({opp_tag}). Mirror first attack 2⭐, 1⭐ first 16h, 2⭐ last 8h. No extras.");
-    const ping = cfg.mail_ping_role_id ? `<@&${cfg.mail_ping_role_id}>` : "";
-    const content = tpl
-      .replaceAll("{opponent}", war.opponent_name ?? war.opponent_tag)
-      .replaceAll("{opp_tag}", war.opponent_tag)
-      .replaceAll("{our}", war.clan_name ?? war.clan_tag)
-      .replaceAll("{our_tag}", war.clan_tag)
-      .replaceAll("{ping}", ping);
-    await fetch(`https://discord.com/api/v10/channels/${cfg.mail_channel_id}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bot ${Deno.env.get("DISCORD_BOT_TOKEN")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content,
-        allowed_mentions: { parse: ["roles"] },
-      }),
-    });
+    let tpl: string | null = null;
+    if (opts.choice === "win") tpl = cfg.win_announcement
+      ?? "🏆 {ping} — We're going for the **WIN** vs **{opponent}** ({opp_tag})! Mirror first attack 3⭐, ≥2⭐ in first 16h, 3⭐ in last 8h.";
+    else if (opts.choice === "lose") tpl = cfg.lose_announcement
+      ?? "🏳️ {ping} — We're **LOSING** vs **{opponent}** ({opp_tag}). Mirror first attack 2⭐, 1⭐ first 16h, 2⭐ last 8h. No extras.";
+    else if (opts.choice === "miss") tpl =
+      "🚫 {ping} — **MISS** vs **{opponent}** ({opp_tag}). Do **NOT** attack. Decided by " + opts.decidedByDisplay + ".";
+    if (tpl) {
+      const ping = cfg.mail_ping_role_id ? `<@&${cfg.mail_ping_role_id}>` : "";
+      const content = tpl
+        .replaceAll("{opponent}", war.opponent_name ?? war.opponent_tag)
+        .replaceAll("{opp_tag}", war.opponent_tag)
+        .replaceAll("{our}", war.clan_name ?? war.clan_tag)
+        .replaceAll("{our_tag}", war.clan_tag)
+        .replaceAll("{ping}", ping);
+      await fetch(`https://discord.com/api/v10/channels/${cfg.mail_channel_id}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bot ${Deno.env.get("DISCORD_BOT_TOKEN")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ content, allowed_mentions: { parse: ["roles"] } }),
+      });
+    }
   }
 
+  const verb = prevDecision && prevDecision !== opts.choice ? `Changed from **${prevDecision.toUpperCase()}** to` : "Set to";
+  return { ok: true, message: `✅ ${verb} **${opts.choice.toUpperCase()}**.` };
+}
+
+// War decision button handler (custom_id: war:set:<war_id>:<win|lose|miss>)
+async function handleWarSet(interaction: any): Promise<Response> {
+  const cid: string = interaction.data?.custom_id ?? "";
+  const parts = cid.split(":");
+  const warId = parseInt(parts[2] ?? "", 10);
+  const choice = parts[3] as "win" | "lose" | "miss";
+  if (!warId || !["win", "lose", "miss"].includes(choice)) {
+    return new Response(JSON.stringify({ type: 6 }), { headers: { "Content-Type": "application/json" } });
+  }
+
+  const sb = adminClient();
+  const { data: war } = await sb.from("wars").select("guild_id,clan_tag,rep_message_id").eq("id", warId).maybeSingle();
+  if (!war) return reply("⚠️ This war is no longer being tracked.");
+  const { data: cfg } = await sb.from("war_track_config")
+    .select("rep_role_id").eq("guild_id", war.guild_id).eq("clan_tag", war.clan_tag).maybeSingle();
+
+  const memberRoles: string[] = interaction.member?.roles ?? [];
+  const repRole = cfg?.rep_role_id;
+  const isAdmin = (BigInt(interaction.member?.permissions ?? "0") & 0x8n) === 0x8n;
+  const allowed = isAdmin || (repRole && memberRoles.includes(repRole));
+  if (!allowed) return reply(`⛔ Only members with <@&${repRole ?? "rep_role"}> can decide this war.`);
+
+  const userId = callerUserId(interaction);
+  const display = interaction.member?.user?.username ?? `<@${userId}>`;
+  const res = await applyWarDecision({
+    warId, choice, guildId: interaction.guild_id, decidedBy: userId, decidedByDisplay: display,
+  });
   return new Response(JSON.stringify({
     type: RESP_CHANNEL_MSG,
-    data: { content: `✅ Locked in: **${choice.toUpperCase()}**. Announcement posted.`, flags: 64 },
+    data: { content: res.message, flags: 64 },
   }), { headers: { "Content-Type": "application/json" } });
+}
+
+// /war_decision slash command — manual override outside of the rep message.
+async function handleWarDecisionCmd(interaction: any): Promise<Response> {
+  const denied = await gate(interaction, "war_decision"); if (denied) return denied;
+  const opts = interaction.data.options ?? [];
+  const clanTag = normalizeTag(String(getOpt(opts, "clan_tag") ?? ""));
+  const choice = String(getOpt(opts, "decision") ?? "") as "win" | "lose" | "miss";
+  if (!clanTag) return reply("⚠️ Provide a `clan_tag`.");
+  if (!["win", "lose", "miss"].includes(choice)) return reply("⚠️ Decision must be `win`, `lose`, or `miss`.");
+
+  const sb = adminClient();
+  const { data: cfg } = await sb.from("war_track_config")
+    .select("rep_role_id").eq("guild_id", interaction.guild_id).eq("clan_tag", clanTag).maybeSingle();
+  const memberRoles: string[] = interaction.member?.roles ?? [];
+  const isAdmin = (BigInt(interaction.member?.permissions ?? "0") & 0x8n) === 0x8n;
+  const allowed = isAdmin || (cfg?.rep_role_id && memberRoles.includes(cfg.rep_role_id));
+  if (!allowed) return reply(`⛔ Only admins or <@&${cfg?.rep_role_id ?? "rep_role"}> can use this.`);
+
+  // Find the most recent active war for this clan in this guild.
+  const { data: war } = await sb.from("wars")
+    .select("id")
+    .eq("guild_id", interaction.guild_id).eq("clan_tag", clanTag)
+    .eq("result_posted", false)
+    .order("start_time", { ascending: false }).limit(1).maybeSingle();
+  if (!war) return reply(`⚠️ No active war found for \`${clanTag}\`.`);
+
+  const userId = callerUserId(interaction);
+  const display = interaction.member?.user?.username ?? `<@${userId}>`;
+  const res = await applyWarDecision({
+    warId: war.id, choice, guildId: interaction.guild_id, decidedBy: userId, decidedByDisplay: display,
+  });
+  return reply(res.message);
 }
 
 
@@ -1991,8 +2059,8 @@ Deno.serve(async (req) => {
         const payload = buildHelpPayload(page);
         return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
       }
-      if (cid.startsWith("war:decide:")) {
-        return await handleWarDecide(interaction);
+      if (cid.startsWith("war:decide:") || cid.startsWith("war:set:")) {
+        return await handleWarSet(interaction);
       }
       if (cid.startsWith("fam:view:")) {
         const guildId = interaction.guild_id ?? "";
@@ -2257,6 +2325,7 @@ Deno.serve(async (req) => {
         case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
         case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
         case "current_war": return await handleCocCmd(interaction, buildCurrentWar);
+        case "war_decision": return await handleWarDecisionCmd(interaction);
         case "war_log": return await handleCocCmd(interaction, buildWarLog);
         case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
         case "cwl": return await handleCocCmd(interaction, buildCwl);

@@ -6,7 +6,8 @@
 import { adminClient } from "./leaderboard.ts";
 import { normalizeTag, postCoc, fetchClan, fetchPlayer } from "./coc.ts";
 import { applyTemplate } from "./embed_templates.ts";
-import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink, compositionLine } from "./war.ts";
+import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink, compositionLine, isFwaMatch } from "./war.ts";
+import { fetchFwaRecommendation } from "./fwa_points.ts";
 
 const COLOR = 0x5865F2;
 const COLOR_GREEN = 0x57F287;
@@ -244,6 +245,29 @@ export async function buildCurrentWar(guildId: string, args: { tag?: string; tar
     { name: `🏠 ${opp.name} Composition`, value: compositionLine(opp.members, thMap), inline: false },
     { name: "🔗 Links", value: `[Us — ChocolateClash](${ccClanLink(tag)}) • [Opponent — ChocolateClash](${ccClanLink(opp.tag)})`, inline: false },
   ];
+
+  // FWA verdict: only meaningful for FWA matches. Pulled from points.fwafarm.com.
+  try {
+    const isFwa = await isFwaMatch(tag, opp.tag);
+    if (isFwa) {
+      const rec = await fetchFwaRecommendation(tag);
+      if (rec) {
+        const verdict = rec.decision === "win" ? "🏆 **WIN**" : "🏳️ **LOSE**";
+        fields.splice(3, 0, {
+          name: "🍫 FWA Verdict",
+          value: `${verdict} — _${rec.reason}_\n[Win Calculator ↗](https://points.fwafarm.com/clan?tag=${tagNoHash(tag)})`,
+          inline: false,
+        });
+      } else {
+        fields.splice(3, 0, {
+          name: "🍫 FWA Verdict",
+          value: `_FWA match — verdict not yet posted on points.fwafarm.com_`,
+          inline: false,
+        });
+      }
+    }
+  } catch (e) { console.error("fwa verdict lookup failed", e); }
+
   const base = {
     title: `${ours.name} vs ${opp.name}`,
     description: `[${ours.name} (\`${ours.tag}\`)](${clanProfileLink(ours.tag)}) **VS** [${opp.name} (\`${opp.tag}\`)](${clanProfileLink(opp.tag)})`,

@@ -425,6 +425,18 @@ export const COMMANDS: any[] = [
     ],
   },
   {
+    name: "war_decision",
+    description: "Manually set the strategy for the active war (WIN / LOSE / MISS).",
+    options: [
+      { type: STRING, name: "clan_tag", description: "Clan tag (e.g. #ABC123)", required: true, autocomplete: true },
+      { type: STRING, name: "decision", description: "Choose the strategy", required: true, choices: [
+        { name: "WIN — go for it",  value: "win" },
+        { name: "LOSE — friendly", value: "lose" },
+        { name: "MISS — don't attack", value: "miss" },
+      ] },
+    ],
+  },
+  {
     name: "war_log",
     description: "Show the last 10 regular wars for a clan",
     options: [
