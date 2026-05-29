@@ -2059,8 +2059,8 @@ Deno.serve(async (req) => {
         const payload = buildHelpPayload(page);
         return new Response(JSON.stringify({ type: RESP_UPDATE_MESSAGE, data: payload }), { headers: { "Content-Type": "application/json" } });
       }
-      if (cid.startsWith("war:decide:")) {
-        return await handleWarDecide(interaction);
+      if (cid.startsWith("war:decide:") || cid.startsWith("war:set:")) {
+        return await handleWarSet(interaction);
       }
       if (cid.startsWith("fam:view:")) {
         const guildId = interaction.guild_id ?? "";
