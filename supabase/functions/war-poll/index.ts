@@ -216,7 +216,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
       }
 
       // Use decision (set by reps) or fall back to actual result
-      const decision = (war.decision ?? result) as "win" | "lose";
+      const decision = (war.decision ?? result) as "win" | "lose" | "miss";
       // Build attackTimes map from war_attacks.recorded_at (first-seen timestamps)
       const { data: atkRows } = await sb.from("war_attacks")
         .select("attacker_tag,attack_order,recorded_at").eq("war_id", war.id);
