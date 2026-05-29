@@ -2325,6 +2325,7 @@ Deno.serve(async (req) => {
         case "player_info": return await handleCocCmd(interaction, buildPlayerInfo);
         case "clan_info": return await handleCocCmd(interaction, buildClanInfo);
         case "current_war": return await handleCocCmd(interaction, buildCurrentWar);
+        case "war_decision": return await handleWarDecisionCmd(interaction);
         case "war_log": return await handleCocCmd(interaction, buildWarLog);
         case "clan_members": return await handleCocCmd(interaction, buildClanMembers);
         case "cwl": return await handleCocCmd(interaction, buildCwl);
