@@ -105,20 +105,13 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
           war.decided_by = "auto-fwa";
           war.decided_at = decidedAt;
 
-          // Patch the reps approval message (if any) to show it was auto-decided.
+          // Patch the reps approval message — keep WIN/LOSE/MISS buttons clickable so
+          // admins can override the auto-pick any time before war ends.
           if (war.rep_message_id && cfg.rep_channel_id) {
             try {
+              const { buildDecisionButtons } = await import("../_shared/war.ts");
               await editMessage(cfg.rep_channel_id, war.rep_message_id, {
-                components: [{
-                  type: 1,
-                  components: [{
-                    type: 3,
-                    custom_id: `war:auto:${war.id}`,
-                    placeholder: `Auto-decided: ${rec.decision.toUpperCase()} (FWA · ${rec.reason})`,
-                    disabled: true,
-                    options: [{ label: "Auto-decided", value: "x" }],
-                  }],
-                }],
+                components: [buildDecisionButtons(war.id)],
               });
             } catch (e) { console.error("patch rep msg (auto)", e); }
           }
