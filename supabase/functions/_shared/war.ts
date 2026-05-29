@@ -330,7 +330,7 @@ function windowLabel(w: "first_16h" | "mid" | "last_8h", rules: ClanRules): stri
 }
 
 export function evaluateRules(opts: {
-  decision: "win" | "lose";
+  decision: "win" | "lose" | "miss";
   startTime?: Date;
   endTime: Date;
   ourMembers: WarMember[];
@@ -338,6 +338,9 @@ export function evaluateRules(opts: {
   attackTimes?: Record<string, Date | string>;
   rules?: ClanRules;
 }): RuleBreak[] {
+  // "miss" strategy = everyone is supposed to miss; no rule breaks to flag.
+  if (opts.decision === "miss") return [];
+
   const rules = opts.rules ?? DEFAULT_CLAN_RULES;
   const breaks: RuleBreak[] = [];
   const cleanupStart = new Date(opts.endTime.getTime() - rules.cleanup_window_hours * 3600_000);
