@@ -142,6 +142,40 @@ function StatusBar({ pct, color = "#F1B93B" }: { pct: number; color?: string }) 
   );
 }
 
+function DecisionBadge({ decision, by }: { decision?: string | null; by?: string | null }) {
+  if (!decision) return <span className="text-white/40 text-xs">—</span>;
+  const tone = decision === "win"
+    ? "bg-emerald-500/20 text-emerald-300"
+    : decision === "lose"
+      ? "bg-red-500/20 text-red-300"
+      : "bg-white/10 text-white/70";
+  const icon = decision === "win" ? "🏆" : decision === "lose" ? "🏳️" : "🚫";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold tracking-wide ${tone}`}>
+      {icon} {decision.toUpperCase()}
+      {by && <span className="font-normal opacity-60">· {by === "auto-fwa" ? "auto" : by === "manual" ? "manual" : by}</span>}
+    </span>
+  );
+}
+
+function FwaBadge({ fwa }: { fwa: any }) {
+  if (!fwa) return null;
+  if (fwa.status === "ok" && fwa.decision) {
+    const tone = fwa.decision === "win" ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300";
+    const icon = fwa.decision === "win" ? "🏆" : "🏳️";
+    return (
+      <a href={fwa.calculatorUrl} target="_blank" rel="noreferrer" title={fwa.reason ?? ""}
+         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold tracking-wide hover:underline ${tone}`}>
+        🍫 FWA {icon} {fwa.decision.toUpperCase()}
+      </a>
+    );
+  }
+  if (fwa.status === "blocked") {
+    return <a href={fwa.calculatorUrl} target="_blank" rel="noreferrer" className="text-[11px] text-amber-300/80 italic hover:underline">🍫 FWA verdict blocked — retry</a>;
+  }
+  return <a href={fwa.calculatorUrl} target="_blank" rel="noreferrer" className="text-[11px] text-white/40 italic hover:underline">🍫 FWA verdict not posted</a>;
+}
+
 function LiveIntel({ live, countdown }: { live: any; countdown: any }) {
   if (!live || live.state === "notInWar") {
     return <div className="text-center py-16 text-white/60">No active war right now.</div>;
@@ -150,8 +184,15 @@ function LiveIntel({ live, countdown }: { live: any; countdown: any }) {
   return (
     <div className="grid lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 bg-black/40 border border-white/5 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           <span className="text-emerald-400 font-bold text-sm tracking-wider">WAR ACTIVE</span>
+          {live.match_type && (
+            <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded bg-white/10 text-white/70">
+              {String(live.match_type).toUpperCase()}
+            </span>
+          )}
+          <DecisionBadge decision={live.decision} by={live.decided_by} />
+          <FwaBadge fwa={live.fwa} />
           <span className="ml-auto text-sm text-white/70">
             <span className="font-bold text-white">{live.clan?.name}</span>
             <span className="text-white/40"> vs </span>
@@ -159,6 +200,11 @@ function LiveIntel({ live, countdown }: { live: any; countdown: any }) {
             <span className="ml-2 text-white/40">• {teamSize}v{teamSize}</span>
           </span>
         </div>
+        {live.fwa?.status === "ok" && live.fwa.reason && (
+          <div className="mb-3 text-xs text-white/60">
+            <span className="text-white/40">FWA reason:</span> <span className="italic">{live.fwa.reason}</span>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-6 items-center text-center">
           <div>
             <div className="text-emerald-400 font-bold text-xs tracking-wider mb-1">{live.clan?.name?.toUpperCase()}</div>
@@ -173,6 +219,7 @@ function LiveIntel({ live, countdown }: { live: any; countdown: any }) {
             <div className="text-xs text-white/40 mt-1">Attacks: {live.opponent?.attacks}/{teamSize * 2}</div>
           </div>
         </div>
+
       </div>
 
       <div className="bg-black/40 border border-white/5 rounded-xl p-5">
