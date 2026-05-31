@@ -841,6 +841,12 @@ export type Database = {
           decision: string | null
           end_time: string | null
           fired_reminders: number[]
+          fwa_checked_at: string | null
+          fwa_decision: string | null
+          fwa_reason: string | null
+          fwa_war_id: string | null
+          fwa_winner_name: string | null
+          fwa_winner_tag: string | null
           guild_id: string
           id: number
           match_type: string | null
@@ -872,6 +878,12 @@ export type Database = {
           decision?: string | null
           end_time?: string | null
           fired_reminders?: number[]
+          fwa_checked_at?: string | null
+          fwa_decision?: string | null
+          fwa_reason?: string | null
+          fwa_war_id?: string | null
+          fwa_winner_name?: string | null
+          fwa_winner_tag?: string | null
           guild_id: string
           id?: number
           match_type?: string | null
@@ -903,6 +915,12 @@ export type Database = {
           decision?: string | null
           end_time?: string | null
           fired_reminders?: number[]
+          fwa_checked_at?: string | null
+          fwa_decision?: string | null
+          fwa_reason?: string | null
+          fwa_war_id?: string | null
+          fwa_winner_name?: string | null
+          fwa_winner_tag?: string | null
           guild_id?: string
           id?: number
           match_type?: string | null
