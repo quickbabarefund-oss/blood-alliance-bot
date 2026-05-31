@@ -11,6 +11,8 @@ import { postCoc, normalizeTag, fetchClan } from "../_shared/coc.ts";
 import {
   CurrentWar, parseCocTime, loadClanRules, DEFAULT_CLAN_RULES, evaluateRules,
 } from "../_shared/war.ts";
+import { fetchFwa } from "../_shared/fwa_points.ts";
+
 
 function ok(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -86,7 +88,7 @@ function buildLiveFeed(cw: CurrentWar) {
   return { items, priorityTargets, teamSize: ts };
 }
 
-async function handleLive(clanTag: string) {
+async function handleLive(clanTag: string, guildId: string) {
   const cw = await fetchCurrentWar(clanTag);
   if (!cw || cw.state === "notInWar" || !cw.clan || !cw.opponent) {
     return ok({ state: "notInWar" });
@@ -96,11 +98,46 @@ async function handleLive(clanTag: string) {
   const { items, priorityTargets, teamSize } = buildLiveFeed(cw);
   const ourAtkUsed = (cw.clan.members ?? []).reduce((n, m) => n + (m.attacks?.length ?? 0), 0);
   const oppAtkUsed = (cw.opponent.members ?? []).reduce((n, m) => n + (m.attacks?.length ?? 0), 0);
+
+  // Pull persisted decision + FWA verdict from the wars row (if war-poll has
+  // seen it). Falls back to a live FWA fetch when nothing is stored yet.
+  const sb = adminClient();
+  const { data: warRow } = await sb.from("wars")
+    .select("id,match_type,decision,decided_by,decided_at,fwa_decision,fwa_reason,fwa_winner_name,fwa_winner_tag,fwa_war_id,fwa_checked_at")
+    .eq("clan_tag", clanTag).eq("opponent_tag", cw.opponent.tag)
+    .eq("start_time", startTime?.toISOString() ?? "")
+    .maybeSingle();
+
+  let fwa: { status: string; decision?: string; reason?: string; winnerName?: string; warId?: string | null; calculatorUrl: string } | null = null;
+  const calculatorUrl = `https://points.fwafarm.com/clan?tag=${clanTag.replace(/^#/, "")}`;
+  const matchType = warRow?.match_type ?? null;
+  if ((matchType ?? "").toUpperCase() === "FWA") {
+    if (warRow?.fwa_decision) {
+      fwa = {
+        status: "ok", decision: warRow.fwa_decision, reason: warRow.fwa_reason ?? "",
+        winnerName: warRow.fwa_winner_name ?? "", warId: warRow.fwa_war_id ?? null,
+        calculatorUrl,
+      };
+    } else {
+      const live = await fetchFwa(clanTag);
+      fwa = {
+        status: live.status,
+        decision: live.rec?.decision, reason: live.rec?.reason,
+        winnerName: live.rec?.winnerName, warId: live.rec?.warId ?? null,
+        calculatorUrl,
+      };
+    }
+  }
+
   return ok({
     state: cw.state,
     team_size: teamSize,
     start_time: startTime?.toISOString() ?? null,
     end_time: endTime?.toISOString() ?? null,
+    match_type: matchType,
+    decision: warRow?.decision ?? null,
+    decided_by: warRow?.decided_by ?? null,
+    fwa,
     clan: {
       tag: cw.clan.tag, name: cw.clan.name, badge: cw.clan.badgeUrls?.medium ?? null,
       stars: cw.clan.stars ?? 0, destruction: pctSafe(cw.clan.destructionPercentage), attacks: ourAtkUsed,
@@ -115,6 +152,7 @@ async function handleLive(clanTag: string) {
     feed: items,
   });
 }
+
 
 async function handleRoom(clanTag: string, guildId: string) {
   const cw = await fetchCurrentWar(clanTag);
@@ -161,7 +199,7 @@ async function handleOverview(clanTag: string, guildId: string) {
   let clan: any = null;
   try { clan = await fetchClan(clanTag); } catch (e) { console.error("fetchClan", e); }
   const { data: history } = await sb.from("wars")
-    .select("id,opponent_name,opponent_tag,result,decision,our_stars,opp_stars,our_destruction,opp_destruction,end_time,match_type")
+    .select("id,opponent_name,opponent_tag,result,decision,decided_by,our_stars,opp_stars,our_destruction,opp_destruction,end_time,match_type,fwa_decision,fwa_reason")
     .eq("guild_id", guildId).eq("clan_tag", clanTag)
     .eq("result_posted", true)
     .order("end_time", { ascending: false }).limit(10);
@@ -227,7 +265,7 @@ Deno.serve(async (req) => {
     if (!clan) return bad("missing clan tag");
 
     switch (action) {
-      case "live":     return await handleLive(clan);
+      case "live":     return await handleLive(clan, guild);
       case "room":     return await handleRoom(clan, guild);
       case "debrief":  return await handleDebrief(clan, guild);
       case "overview": return await handleOverview(clan, guild);

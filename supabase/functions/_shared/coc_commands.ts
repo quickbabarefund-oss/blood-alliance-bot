@@ -7,7 +7,9 @@ import { adminClient } from "./leaderboard.ts";
 import { normalizeTag, postCoc, fetchClan, fetchPlayer } from "./coc.ts";
 import { applyTemplate } from "./embed_templates.ts";
 import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink, compositionLine, isFwaMatch } from "./war.ts";
-import { fetchFwaRecommendation } from "./fwa_points.ts";
+import { fetchFwa, fwaVerdictField } from "./fwa_points.ts";
+
+
 
 const COLOR = 0x5865F2;
 const COLOR_GREEN = 0x57F287;
@@ -246,27 +248,32 @@ export async function buildCurrentWar(guildId: string, args: { tag?: string; tar
     { name: "🔗 Links", value: `[Us — ChocolateClash](${ccClanLink(tag)}) • [Opponent — ChocolateClash](${ccClanLink(opp.tag)})`, inline: false },
   ];
 
-  // FWA verdict: only meaningful for FWA matches. Pulled from points.fwafarm.com.
+  // FWA verdict: only meaningful for FWA matches. Prefer persisted verdict on
+  // the wars row (war-poll keeps it fresh) and fall back to a live fetch.
   try {
     const isFwa = await isFwaMatch(tag, opp.tag);
     if (isFwa) {
-      const rec = await fetchFwaRecommendation(tag);
-      if (rec) {
-        const verdict = rec.decision === "win" ? "🏆 **WIN**" : "🏳️ **LOSE**";
-        fields.splice(3, 0, {
-          name: "🍫 FWA Verdict",
-          value: `${verdict} — _${rec.reason}_\n[Win Calculator ↗](https://points.fwafarm.com/clan?tag=${tagNoHash(tag)})`,
-          inline: false,
-        });
+      const sb = adminClient();
+      const { data: warRow } = await sb.from("wars")
+        .select("fwa_decision,fwa_reason,fwa_winner_name,fwa_winner_tag,fwa_war_id")
+        .eq("guild_id", guildId).eq("clan_tag", tag).eq("opponent_tag", opp.tag)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (warRow?.fwa_decision) {
+        fields.splice(3, 0, fwaVerdictField("ok", {
+          winnerName: warRow.fwa_winner_name ?? "",
+          winnerTag: warRow.fwa_winner_tag ?? "",
+          decision: warRow.fwa_decision as "win" | "lose",
+          reason: warRow.fwa_reason ?? "",
+          warId: warRow.fwa_war_id ?? null,
+          winCalculatorUrl: `https://points.fwafarm.com/clan?tag=${tagNoHash(tag)}`,
+        }, tag));
       } else {
-        fields.splice(3, 0, {
-          name: "🍫 FWA Verdict",
-          value: `_FWA match — verdict not yet posted on points.fwafarm.com_`,
-          inline: false,
-        });
+        const { status, rec } = await fetchFwa(tag);
+        fields.splice(3, 0, fwaVerdictField(status, rec, tag));
       }
     }
   } catch (e) { console.error("fwa verdict lookup failed", e); }
+
 
   const base = {
     title: `${ours.name} vs ${opp.name}`,

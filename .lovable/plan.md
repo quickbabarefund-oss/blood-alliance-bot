@@ -1,84 +1,50 @@
-# War Tracker — Plan
+## Goal
+Make the FWA Points verdict visible everywhere a war is shown, and fix the reason `/current_war` says "verdict not yet posted" — `points.fwafarm.com` is behind a Cloudflare bot challenge, so our edge fetch (with a `ValkonWarBot` UA) is being served the JS-challenge page instead of the real HTML, so `winner-box` never matches.
 
-## 1. New `/war_tracker` slash command + public web page
+## Changes
 
-Mirror the `/discord_link` pattern: slash command replies with a link to a hosted page that loads live data by clan tag.
+### 1. Fix the FWA Points fetch (`supabase/functions/_shared/fwa_points.ts`)
+- Send realistic browser headers so Cloudflare lets us through:
+  `User-Agent: Mozilla/5.0 ... Chrome/124 Safari/537.36`, `Accept: text/html,...`, `Accept-Language: en-US,en;q=0.9`, `Referer: https://points.fwafarm.com/`, `Sec-Fetch-*` headers.
+- Detect a challenge response (HTML contains `Just a moment` / `cf_chl_opt` / no `winner-box`) and log a clear `"fwa points: cloudflare challenge"` line, return `null` with a typed reason so callers can show "blocked" vs "no verdict yet".
+- Add a short in-memory cache (5 min, keyed by clan tag) so we don't hammer fwafarm for every poll + every `/current_war`.
+- Extend the return shape with `winCalculatorUrl` and `warId` already-extracted so embeds can deep-link.
 
-**Discord side**
+### 2. Persist the verdict on the war row
+Add new columns to `public.wars` so the verdict is shown even if fwafarm is temporarily blocked:
+- `fwa_decision text` (`win` | `lose`)
+- `fwa_reason text`
+- `fwa_winner_name text`
+- `fwa_winner_tag text`
+- `fwa_war_id text`
+- `fwa_checked_at timestamptz`
 
-- New global command `/war_tracker` with optional `clan` arg (defaults to first tracked clan in the guild). When invoked, posts an ephemeral embed with a "🛡️ Open War Tracker" link button → `https://clan-loot-tracker.lovable.app/war/<clanTag>`.
-- Registered in `_shared/commands.ts`, handled in `discord-interactions/index.ts`.
+`war-poll` writes these whenever `fetchFwaRecommendation` succeeds (in both preparation and battle day), independent of the auto-decision logic. Auto-decision still only fires on battle day when `decision` is unset, exactly like today.
 
-**Web page (`/war/:clanTag`)**
-Single React page styled to match the uploaded screenshots:
+### 3. Show FWA Verdict on the Reps approval embed (`_shared/war.ts` → `buildRepsPayload`)
+Add a new field (only when `matchType === "FWA"`):
+- ✅ Verdict known →
+  `🍫 FWA Verdict` : `🏆 WIN — points (10 > 6)` + `[Win Calculator ↗](https://points.fwafarm.com/clan?tag=...)`
+- ⏳ Not posted yet → `_FWA match — verdict not yet posted on points.fwafarm.com_`
+- 🛑 Cloudflare blocked us → `_Could not reach points.fwafarm.com (rate limited) — will retry_`
 
-- Header: "WAR TRACKER · SLACKER ALERT", gold/yellow display font on a dark CoC-themed background.
-- Top: tag input + "🔍 Check War" button (preloads from URL param).
-- Tabs: **Live Intel**, **War Room**, **War Debrief**, **Clan Overview**.
-- **Live Intel** — current war card (state, our/opp stars + destruction + attacks N/100), countdown, War Momentum bar (color-graded), Win Probability %, Priority Targets count, Live Feed of attacks (timestamp, attacker, stars, destruction, CLUTCH/RISKY badges).
-- **War Room** — roster (TH, map pos, used 0/2/1/2/2/2), mirror suggestions, who still owes attacks, last-8h cleanup queue.
-- **War Debrief** — last completed war: result, stars, destruction, violations grouped by player (uses same rule engine).
-- **Clan Overview** — clan badge, members, recent war history, win/loss streak.
+`war-poll` calls `editMessage` to refresh the reps embed when the verdict first appears, so an embed posted in preparation gets updated once fwafarm publishes the verdict.
 
-**Data sources**
+### 4. Update `/current_war` (`_shared/coc_commands.ts`)
+Use the cached/persisted verdict from `wars` first, fall back to a live fetch. Same three-state field text as above so "blocked" and "not yet posted" are no longer confused.
 
-- New edge function `war-tracker-api` (verify_jwt = false) with actions: `live`, `room`, `debrief`, `overview`. Pulls from `wars`, `war_attacks`, `war_rule_breaks` and live `current_war` via the existing CoC proxy.
-- Win probability: simple heuristic — `0.5 + 0.5 * (starsDiff / (teamSize*3)) + 0.2 * (destructionDiff/100)` clamped 5–95%.
-- Momentum: `(ourRecentStars - oppRecentStars) / max` over last 6 attacks → 0–100%.
-- CLUTCH = 3⭐ on a mirror or higher; RISKY = stars < 2 outside cleanup window.
+### 5. Show decision + FWA verdict on the War UI (`src/pages/WarTracker.tsx`)
+The current page already lists wars from the `wars` table. Add two columns / badges to each war row:
+- **Strategy** — `WIN` / `LOSE` / `MISS` badge from `wars.decision` (with "auto-fwa" / "manual" tag from `decided_by`), or `—` if unset.
+- **FWA Verdict** — `🏆 WIN` / `🏳️ LOSE` badge from `wars.fwa_decision` with `fwa_reason` as tooltip, link icon to the Win Calculator. Shown only for `match_type = 'FWA'`.
 
-## 2. Rule engine updates (`_shared/war.ts → evaluateRules`)  
-  
-Apply in WIn War and -1 stars in Lose war in all situations
+No other UI restructuring.
 
-Add an `is16hWindow` concept: first 16h of battle day = `[startTime, startTime + 16h)`; last-8h cleanup unchanged.
+### 6. Re-deploy edge functions
+`war-poll`, `discord-interactions`, `war-tracker-api` (the last reads `wars` and must surface the new columns).
 
-- **early_cleanup**: only report when the 2nd attack lands **before** the last-8h window **AND** stars < 3. A 3⭐ early second hit is **fine** (loot/cleanup safe). 1⭐/2⭐ early second → still a break.
-- **low_stars** (2nd attack): trigger only outside the cleanup window with stars < 2, and skip if the same attack already produced an `early_cleanup` break (no double-report).
-- **mirror_first**: keep the rule, but always append the attack window in the detail string:  `— attacked in first-16h` or  `— attacked in last-8h cleanup`. Wording becomes e.g. `1st attack should mirror own #34 for 3⭐ — hit #1 for 3⭐ (last-8h cleanup)`.
-- Add `attack_window` field to each `RuleBreak` for the UI to color-tag.
-
-## 3. Discord message cut-off fix
-
-`buildResultEmbeds` currently truncates the violators list with `.slice(0, 4000)`. Discord embed description max is 4096, but the full final-result post is sent as a single embed → long wars overflow.
-
-- Split violators into multiple embeds of ≤ 3800 chars each (page 2, 3, 4 …) with paginated footers.
-- `war-poll/index.ts` already calls `createMessageWithFile` once; switch to sending the file once, then follow-up `createMessage` calls for any extra violation pages so nothing is dropped.
-
-## 4. Custom per-clan rules
-
-New table `clan_war_rules` (guild_id, clan_tag, key, value):
-
-
-| key                              | default          | meaning                                                      |
-| -------------------------------- | ---------------- | ------------------------------------------------------------ |
-| `cleanup_window_hours`           | 8                | size of cleanup window from war end                          |
-| `first_window_hours`             | 16               | size of "early" window from war start                        |
-| `early_min_stars`                | 3                | min stars for an early 2nd hit to NOT break early_cleanup    |
-| `low_star_min_2nd`               | 2                | required stars on 2nd attack outside cleanup                 |
-| `mirror_first_enabled`           | true             | enforce 1st attack on mirror                                 |
-| `mirror_first_min_stars`         | 3 (win)/2 (lose) | min stars on mirror                                          |
-| `report_first_window_only_3star` | true             | when true, only report 3⭐-related issues during first window |
-
-
-- `evaluateRules` accepts an optional `rules` map and falls back to defaults.
-- `war-poll` loads rules per `(guild_id, clan_tag)` before evaluating.
-- Web page gets a small "Rules" editor in **Clan Overview** for admins (guarded by existing permission check) → writes to `clan_war_rules`.
-
-## Technical Notes
-
-- Files touched: `_shared/commands.ts`, `_shared/war.ts`, `_shared/discord.ts` (paginated follow-ups), `discord-interactions/index.ts`, `war-poll/index.ts`, new `war-tracker-api/index.ts`, new pages `src/pages/WarTracker.tsx` (+ sub-tab components), route added in `src/App.tsx`.
-- DB migration: create `clan_war_rules` with public read RLS and no public write (admin writes via edge function with service key).
-- Page is public read (matches existing leaderboard pages). Edits require Discord-verified token (reuse `embed_edit_tokens` pattern, issued by the slash command).
-- No changes to auth model; everything keyed by `guild_id` + `clan_tag` as today.
-
-## Suggested build order
-
-1. Migration for `clan_war_rules`.
-2. Rule engine changes + message pagination (fixes the cut-off and 3⭐ false positives immediately).
-3. `war-tracker-api` edge function.
-4. `/war_tracker` slash command + page link.
-5. React `WarTracker` page with the 4 tabs.
-6. Admin rules editor on **Clan Overview** tab.
-
-Confirm and I'll start with steps 1–3 (the bug-fix and rules backend) so reports stop breaking, then build the page.
+## Technical notes
+- New columns are nullable + default `null`, so no backfill needed.
+- The Reps embed update on verdict-arrival reuses `buildRepsPayload` and `editMessage`; buttons row is preserved by passing `components: [buildDecisionButtons(war.id)]`.
+- `WarTracker.tsx` reads `wars` via the existing supabase client — RLS for `wars` is `deny all client access`, so reads go through `war-tracker-api`; add `fwa_*` and `decision`/`decided_by` to the response shape there.
+- No new secrets, no schema breakage.
