@@ -390,13 +390,21 @@ function Overview({ data }: { data: any }) {
         <h3 className="font-bold mb-3">War History</h3>
         <div className="space-y-1">
           {(data.history ?? []).map((w: any) => (
-            <div key={w.id} className="flex items-center text-sm border-b border-white/5 py-2">
+            <div key={w.id} className="flex flex-wrap items-center gap-2 text-sm border-b border-white/5 py-2">
               <span className={`w-12 font-bold text-xs ${w.result === "win" ? "text-emerald-400" : "text-red-400"}`}>{(w.result ?? "—").toUpperCase()}</span>
-              <span className="flex-1">{w.opponent_name} <span className="text-white/30 text-xs">{w.opponent_tag}</span></span>
+              <span className="flex-1 min-w-[160px]">{w.opponent_name} <span className="text-white/30 text-xs">{w.opponent_tag}</span></span>
+              <DecisionBadge decision={w.decision} by={w.decided_by} />
+              {String(w.match_type ?? "").toUpperCase() === "FWA" && w.fwa_decision && (
+                <span title={w.fwa_reason ?? ""}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${w.fwa_decision === "win" ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
+                  🍫 {w.fwa_decision === "win" ? "🏆" : "🏳️"} {w.fwa_decision.toUpperCase()}
+                </span>
+              )}
               <span className="text-white/60 text-xs">{w.our_stars}–{w.opp_stars} · {(+w.our_destruction).toFixed(0)}%–{(+w.opp_destruction).toFixed(0)}%</span>
               <span className="text-white/30 text-xs ml-3 w-32 text-right">{new Date(w.end_time).toLocaleDateString()}</span>
             </div>
           ))}
+
           {(data.history ?? []).length === 0 && <div className="text-white/40 text-sm">No history yet.</div>}
         </div>
       </div>
