@@ -8,7 +8,7 @@ import { normalizeTag, postCoc, fetchClan, fetchPlayer } from "./coc.ts";
 import { applyTemplate } from "./embed_templates.ts";
 import { loadThEmojis, thEmoji, parseCocTime, clanProfileLink, compositionLine, isFwaMatch } from "./war.ts";
 import { fetchFwa, fwaVerdictField } from "./fwa_points.ts";
-import { adminClient } from "./leaderboard.ts";
+
 
 
 const COLOR = 0x5865F2;
