@@ -199,7 +199,7 @@ async function handleOverview(clanTag: string, guildId: string) {
   let clan: any = null;
   try { clan = await fetchClan(clanTag); } catch (e) { console.error("fetchClan", e); }
   const { data: history } = await sb.from("wars")
-    .select("id,opponent_name,opponent_tag,result,decision,our_stars,opp_stars,our_destruction,opp_destruction,end_time,match_type")
+    .select("id,opponent_name,opponent_tag,result,decision,decided_by,our_stars,opp_stars,our_destruction,opp_destruction,end_time,match_type,fwa_decision,fwa_reason")
     .eq("guild_id", guildId).eq("clan_tag", clanTag)
     .eq("result_posted", true)
     .order("end_time", { ascending: false }).limit(10);
