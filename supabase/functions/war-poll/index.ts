@@ -67,16 +67,54 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
 
   if (!war) return;
 
+  // Pull FWA verdict for FWA matches (cached 5min). Persist whenever we get
+  // a fresh recommendation so the UI can show it even if a later fetch is
+  // blocked by Cloudflare.
+  let fwaResult: Awaited<ReturnType<typeof fetchFwa>> | null = null;
+  if ((war.match_type ?? "").toUpperCase() === "FWA") {
+    fwaResult = await fetchFwa(clanTag);
+    if (fwaResult.status === "ok" && fwaResult.rec) {
+      const rec = fwaResult.rec;
+      const fwaPatch = {
+        fwa_decision: rec.decision,
+        fwa_reason: rec.reason,
+        fwa_winner_name: rec.winnerName,
+        fwa_winner_tag: rec.winnerTag,
+        fwa_war_id: rec.warId ?? null,
+        fwa_checked_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      await sb.from("wars").update(fwaPatch).eq("id", war.id);
+      Object.assign(war, fwaPatch);
+    } else {
+      await sb.from("wars").update({ fwa_checked_at: new Date().toISOString() }).eq("id", war.id);
+    }
+  }
+
+  const verdictFreshlyArrived = fwaResult?.status === "ok" && !!fwaResult.rec;
+
   // Post Reps embed if not yet posted and we have a rep channel
   if (!war.rep_message_id && cfg.rep_channel_id) {
     try {
-      const payload = await buildRepsPayload({ warId: war.id, war: cw, matchType: war.match_type ?? "Unknown" });
+      const payload = await buildRepsPayload({
+        warId: war.id, war: cw, matchType: war.match_type ?? "Unknown",
+        fwa: fwaResult,
+      });
       const msgId = await createMessage(cfg.rep_channel_id, payload);
       if (msgId) {
         await sb.from("wars").update({ rep_message_id: msgId, updated_at: new Date().toISOString() }).eq("id", war.id);
         war.rep_message_id = msgId;
       }
     } catch (e) { console.error("rep post failed", war.id, e); }
+  } else if (war.rep_message_id && cfg.rep_channel_id && verdictFreshlyArrived) {
+    // Refresh the reps embed when the FWA verdict first becomes available.
+    try {
+      const payload = await buildRepsPayload({
+        warId: war.id, war: cw, matchType: war.match_type ?? "Unknown",
+        fwa: fwaResult,
+      });
+      await editMessage(cfg.rep_channel_id, war.rep_message_id, payload);
+    } catch (e) { console.error("rep refresh failed", war.id, e); }
   }
 
   // Update state if changed
@@ -93,7 +131,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
     // Only runs for FWA matches; pulls from https://points.fwafarm.com/clan?tag=...
     if (!war.decision && (war.match_type ?? "").toUpperCase() === "FWA") {
       try {
-        const rec = await fetchFwaRecommendation(clanTag);
+        const rec = fwaResult?.rec ?? (await fetchFwa(clanTag)).rec;
         if (rec) {
           const decidedAt = new Date().toISOString();
           await sb.from("wars").update({
@@ -116,6 +154,7 @@ async function processClan(guildId: string, clanTag: string, cfg: any) {
               });
             } catch (e) { console.error("patch rep msg (auto)", e); }
           }
+
 
           // Mail-room announcement — optional; skipped when mail_channel_id is null.
           if (cfg.mail_channel_id) {
