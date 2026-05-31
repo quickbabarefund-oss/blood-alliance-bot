@@ -11,6 +11,8 @@ import { postCoc, normalizeTag, fetchClan } from "../_shared/coc.ts";
 import {
   CurrentWar, parseCocTime, loadClanRules, DEFAULT_CLAN_RULES, evaluateRules,
 } from "../_shared/war.ts";
+import { fetchFwa } from "../_shared/fwa_points.ts";
+
 
 function ok(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
