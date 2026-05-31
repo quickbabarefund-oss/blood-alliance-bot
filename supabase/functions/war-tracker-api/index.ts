@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
     if (!clan) return bad("missing clan tag");
 
     switch (action) {
-      case "live":     return await handleLive(clan);
+      case "live":     return await handleLive(clan, guild);
       case "room":     return await handleRoom(clan, guild);
       case "debrief":  return await handleDebrief(clan, guild);
       case "overview": return await handleOverview(clan, guild);
