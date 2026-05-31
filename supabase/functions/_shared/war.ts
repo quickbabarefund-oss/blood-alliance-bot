@@ -113,6 +113,7 @@ export async function buildRepsPayload(opts: {
   warId: number;
   war: CurrentWar;
   matchType: string;
+  fwa?: { status: import("./fwa_points.ts").FwaStatus; rec: import("./fwa_points.ts").FwaRecommendation | null } | null;
 }): Promise<{ embeds: any[]; components: any[] }> {
   const { war } = opts;
   const thMap = await loadThEmojis();
@@ -121,18 +122,28 @@ export async function buildRepsPayload(opts: {
   const endTs = parseCocTime(war.endTime ?? "")?.getTime();
   const endRel = endTs ? `<t:${Math.floor(endTs / 1000)}:R>` : "—";
 
+  const fields: any[] = [
+    { name: "Match Type", value: opts.matchType, inline: true },
+    { name: "Team Size", value: `${war.teamSize ?? "—"} vs ${war.teamSize ?? "—"}`, inline: true },
+    { name: "Ends", value: endRel, inline: true },
+  ];
+
+  if (opts.matchType === "FWA" && opts.fwa) {
+    const { fwaVerdictField } = await import("./fwa_points.ts");
+    fields.push(fwaVerdictField(opts.fwa.status, opts.fwa.rec, ours.tag));
+  }
+
+  fields.push(
+    { name: `${ours.name} Composition`, value: compositionLine(ours.members, thMap), inline: false },
+    { name: `${opp.name} Composition`, value: compositionLine(opp.members, thMap), inline: false },
+  );
+
   const embed = {
     title: `${ours.name} vs ${opp.name}`,
     description: `[${ours.name} (\`${ours.tag}\`)](${clanProfileLink(ours.tag)}) **VS** [${opp.name} (\`${opp.tag}\`)](${clanProfileLink(opp.tag)})`,
     color: opts.matchType === "FWA" ? 0x57F287 : 0xF1B93B,
     thumbnail: ours.badgeUrls?.medium ? { url: ours.badgeUrls.medium } : undefined,
-    fields: [
-      { name: "Match Type", value: opts.matchType, inline: true },
-      { name: "Team Size", value: `${war.teamSize ?? "—"} vs ${war.teamSize ?? "—"}`, inline: true },
-      { name: "Ends", value: endRel, inline: true },
-      { name: `${ours.name} Composition`, value: compositionLine(ours.members, thMap), inline: false },
-      { name: `${opp.name} Composition`, value: compositionLine(opp.members, thMap), inline: false },
-    ],
+    fields,
     footer: { text: "Reps: pick WIN / LOSE / MISS. Re-clickable any time before war ends. If unset before battle day, FWA points auto-picks for FWA matches." },
     timestamp: new Date().toISOString(),
   };
@@ -140,6 +151,7 @@ export async function buildRepsPayload(opts: {
   const buttons = buildDecisionButtons(opts.warId);
   return { embeds: [embed], components: [buttons] };
 }
+
 
 // Reusable WIN / LOSE / MISS button row used for the reps approval message.
 // Buttons stay enabled while the war is active so admins can override at any time.
