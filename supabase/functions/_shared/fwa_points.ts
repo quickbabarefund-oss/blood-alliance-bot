@@ -58,6 +58,37 @@ function isCloudflareChallenge(html: string): boolean {
   return /Just a moment|cf_chl_opt|challenge-platform|__cf_chl_/i.test(html);
 }
 
+// Primary source: clashbotdata aggregated endpoint that's keyed by clan tag
+// and returns { wartype, result } per clan. Avoids Cloudflare entirely.
+const CBD_URL = "http://clashbotdata.duckdns.org:3015/wartype";
+type CbdMap = Record<string, { wartype?: string; result?: string }>;
+let CBD_CACHE: { at: number; map: CbdMap } | null = null;
+
+async function fetchClashbotdata(): Promise<CbdMap | null> {
+  if (CBD_CACHE && Date.now() - CBD_CACHE.at < CACHE_TTL_MS) return CBD_CACHE.map;
+  try {
+    const res = await fetch(CBD_URL);
+    if (!res.ok) { console.log("clashbotdata non-ok", res.status); return null; }
+    const json = (await res.json()) as CbdMap;
+    CBD_CACHE = { at: Date.now(), map: json };
+    return json;
+  } catch (e) {
+    console.error("clashbotdata fetch error", e);
+    return null;
+  }
+}
+
+function lookupCbd(map: CbdMap, tag: string): { wartype: string; result: string } | null {
+  // The endpoint keys include '#'. Normalize for safety.
+  const target = stripHash(tag);
+  for (const [k, v] of Object.entries(map)) {
+    if (stripHash(k) === target) {
+      return { wartype: (v.wartype ?? "").trim(), result: (v.result ?? "").trim() };
+    }
+  }
+  return null;
+}
+
 export async function fetchFwa(ourTag: string): Promise<FwaResult> {
   const tag = stripHash(ourTag);
   if (!tag) return { status: "error", rec: null };
@@ -66,60 +97,82 @@ export async function fetchFwa(ourTag: string): Promise<FwaResult> {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.res;
 
   let result: FwaResult = { status: "error", rec: null };
-  try {
-    const res = await fetch(`https://points.fwafarm.com/clan?tag=${tag}`, {
-      headers: BROWSER_HEADERS,
-      redirect: "follow",
-    });
-    const html = await res.text();
 
-    if (!res.ok) {
-      console.log("fwa points non-ok", tag, res.status);
-      result = { status: "error", rec: null };
-    } else if (isCloudflareChallenge(html)) {
-      console.log("fwa points: cloudflare challenge for", tag);
-      result = { status: "blocked", rec: null };
+  // 1) Try clashbotdata first.
+  const cbd = await fetchClashbotdata();
+  const hit = cbd ? lookupCbd(cbd, tag) : null;
+  if (hit) {
+    const r = hit.result.toLowerCase();
+    if (r === "win" || r === "lose") {
+      result = {
+        status: "ok",
+        rec: {
+          winnerName: r === "win" ? "Our clan" : "Opponent",
+          winnerTag: r === "win" ? tag : "",
+          decision: r as "win" | "lose",
+          reason: `${hit.wartype} — ${r.toUpperCase()}`,
+          warId: null,
+          winCalculatorUrl: `https://points.fwafarm.com/clan?tag=${tag}`,
+        },
+      };
     } else {
-      const boxMatch = /<p class="winner-box">([\s\S]*?)<\/p>/i.exec(html);
-      if (!boxMatch) {
-        result = { status: "not_posted", rec: null };
+      // wartype known (e.g. Blacklisted Match) but no decision yet.
+      result = { status: "not_posted", rec: null };
+    }
+  } else {
+    // 2) Fall back to scraping points.fwafarm.com.
+    try {
+      const res = await fetch(`https://points.fwafarm.com/clan?tag=${tag}`, {
+        headers: BROWSER_HEADERS,
+        redirect: "follow",
+      });
+      const html = await res.text();
+      if (!res.ok) {
+        console.log("fwa points non-ok", tag, res.status);
+      } else if (isCloudflareChallenge(html)) {
+        console.log("fwa points: cloudflare challenge for", tag);
+        result = { status: "blocked", rec: null };
       } else {
-        const box = boxMatch[1];
-        const decisionMatch = /<b>([^<]+)<\/b>\s*should\s+win\s+by\s+([^<\n]+?)(?:<|$)/i.exec(box);
-        if (!decisionMatch) {
+        const boxMatch = /<p class="winner-box">([\s\S]*?)<\/p>/i.exec(html);
+        if (!boxMatch) {
           result = { status: "not_posted", rec: null };
         } else {
-          const winnerName = decisionMatch[1].trim();
-          const reason = decisionMatch[2].replace(/\s+/g, " ").trim();
-          const pairRe = /([^()<>\n]+?)\s*\(<a[^>]*tag=([A-Z0-9]+)[^>]*>\s*\2\s*<\/a>\)/g;
-          const pairs: Array<{ name: string; tag: string }> = [];
-          let pm: RegExpExecArray | null;
-          while ((pm = pairRe.exec(box))) pairs.push({ name: pm[1].trim(), tag: pm[2].trim().toUpperCase() });
-          const winner = pairs.find((p) => p.name === winnerName)
-            ?? pairs.find((p) => winnerName.includes(p.name) || p.name.includes(winnerName));
-          if (!winner) {
+          const box = boxMatch[1];
+          const decisionMatch = /<b>([^<]+)<\/b>\s*should\s+win\s+by\s+([^<\n]+?)(?:<|$)/i.exec(box);
+          if (!decisionMatch) {
             result = { status: "not_posted", rec: null };
           } else {
-            const warIdMatch = /\?id=(\d+)/.exec(box);
-            const decision: "win" | "lose" = winner.tag === tag ? "win" : "lose";
-            result = {
-              status: "ok",
-              rec: {
-                winnerName: winner.name,
-                winnerTag: winner.tag,
-                decision,
-                reason,
-                warId: warIdMatch?.[1] ?? null,
-                winCalculatorUrl: `https://points.fwafarm.com/clan?tag=${tag}`,
-              },
-            };
+            const winnerName = decisionMatch[1].trim();
+            const reason = decisionMatch[2].replace(/\s+/g, " ").trim();
+            const pairRe = /([^()<>\n]+?)\s*\(<a[^>]*tag=([A-Z0-9]+)[^>]*>\s*\2\s*<\/a>\)/g;
+            const pairs: Array<{ name: string; tag: string }> = [];
+            let pm: RegExpExecArray | null;
+            while ((pm = pairRe.exec(box))) pairs.push({ name: pm[1].trim(), tag: pm[2].trim().toUpperCase() });
+            const winner = pairs.find((p) => p.name === winnerName)
+              ?? pairs.find((p) => winnerName.includes(p.name) || p.name.includes(winnerName));
+            if (winner) {
+              const warIdMatch = /\?id=(\d+)/.exec(box);
+              const decision: "win" | "lose" = winner.tag === tag ? "win" : "lose";
+              result = {
+                status: "ok",
+                rec: {
+                  winnerName: winner.name,
+                  winnerTag: winner.tag,
+                  decision,
+                  reason,
+                  warId: warIdMatch?.[1] ?? null,
+                  winCalculatorUrl: `https://points.fwafarm.com/clan?tag=${tag}`,
+                },
+              };
+            } else {
+              result = { status: "not_posted", rec: null };
+            }
           }
         }
       }
+    } catch (e) {
+      console.error("fetchFwa error", tag, e);
     }
-  } catch (e) {
-    console.error("fetchFwa error", tag, e);
-    result = { status: "error", rec: null };
   }
 
   CACHE.set(tag, { at: Date.now(), res: result });
