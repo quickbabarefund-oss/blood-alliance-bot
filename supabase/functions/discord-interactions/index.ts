@@ -1632,7 +1632,7 @@ async function handleCocCmd(
   })());
   return deferred(false);
 }
-const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://clan-loot-tracker.lovable.app";
+const PUBLIC_APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "https://blood-alliance-bot.lovable.app";
 async function handleEmbedEditor(interaction: any): Promise<Response> {
   if (!((BigInt(interaction.member?.permissions ?? "0")) & 0x8n)) {
     return reply("⛔ Only server admins can open the embed editor.");
