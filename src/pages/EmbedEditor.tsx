@@ -184,40 +184,42 @@ export default function EmbedEditor() {
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {slots.map((s) => (
+      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+        {/* Left sidebar: component picker */}
+        <aside className="space-y-1 lg:sticky lg:top-4 lg:self-start">
+          <div className="mb-2 px-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Components</div>
+          {slots.map((s) => (
+            <button
+              key={s.slot}
+              onClick={() => setActive(s.slot)}
+              className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                active === s.slot ? "bg-secondary text-gold" : "bg-card text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+          <div className="my-2 border-t border-border" />
           <button
-            key={s.slot}
-            onClick={() => setActive(s.slot)}
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-              active === s.slot ? "bg-secondary text-gold" : "bg-card text-muted-foreground hover:bg-secondary"
+            onClick={() => setActive("__announcements__")}
+            className={`flex w-full items-center gap-1.5 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+              isAnnouncementsTab ? "bg-secondary text-gold" : "bg-card text-muted-foreground hover:bg-secondary"
             }`}
           >
-            {s.label}
+            <Megaphone className="h-3.5 w-3.5" /> War Announcements
           </button>
-        ))}
-        <button
-          onClick={() => setActive("__announcements__")}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
-            isAnnouncementsTab ? "bg-secondary text-gold" : "bg-card text-muted-foreground hover:bg-secondary"
-          }`}
-        >
-          <Megaphone className="h-3.5 w-3.5" /> War Announcements
-        </button>
-      </div>
+        </aside>
 
-      {isAnnouncementsTab ? (
-        <WarAnnouncementsSection
-          token={token}
-          warClans={warClans}
-          defaults={annDefaults}
-          onSaved={(updated) => setWarClans((cs) => cs.map((c) => c.clan_tag === updated.clan_tag ? updated : c))}
-        />
-      ) : null}
-
-      {!isAnnouncementsTab && (
-
-      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="min-w-0">
+        {isAnnouncementsTab ? (
+          <WarAnnouncementsSection
+            token={token}
+            warClans={warClans}
+            defaults={annDefaults}
+            onSaved={(updated) => setWarClans((cs) => cs.map((c) => c.clan_tag === updated.clan_tag ? updated : c))}
+          />
+        ) : (
+        <div className="grid gap-6 xl:grid-cols-2">
         {/* Form */}
         <Card className="space-y-4 p-5">
           <div className="flex items-center justify-between">
@@ -338,8 +340,10 @@ export default function EmbedEditor() {
             (e.g. <code>{"{opponent}"}</code>, <code>{"{our}"}</code>, <code>{"{ping}"}</code> for war embeds).
           </p>
         </div>
+        </div>
+        )}
+        </div>
       </div>
-      )}
     </div>
   );
 }
