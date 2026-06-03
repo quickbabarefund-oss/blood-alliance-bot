@@ -121,6 +121,7 @@ export interface EmbedTemplate {
   slot: string;
   enabled: boolean;
   title: string | null;
+  title_url: string | null;
   description: string | null;
   color: number | null;
   footer_text: string | null;
@@ -129,6 +130,10 @@ export interface EmbedTemplate {
   content: string | null;
   fields: any[];
   show_timestamp: boolean;
+  author_name: string | null;
+  author_icon_url: string | null;
+  author_url: string | null;
+  components: any[];
 }
 
 export async function getTemplate(guildId: string, slot: string): Promise<EmbedTemplate | null> {
@@ -143,9 +148,34 @@ function interp(s: string | null | undefined, vars: Record<string, any>): string
   return String(s).replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : `{${k}}`));
 }
 
+function interpComponents(components: any[], vars: Record<string, any>): any[] {
+  if (!Array.isArray(components)) return [];
+  return components.map((row: any) => {
+    if (!row || row.type !== 1 || !Array.isArray(row.components)) return row;
+    return {
+      type: 1,
+      components: row.components.map((c: any) => {
+        const out: any = { ...c };
+        if (typeof c.label === "string") out.label = interp(c.label, vars);
+        if (typeof c.url === "string") out.url = interp(c.url, vars);
+        if (typeof c.placeholder === "string") out.placeholder = interp(c.placeholder, vars);
+        if (typeof c.custom_id === "string") out.custom_id = interp(c.custom_id, vars);
+        if (Array.isArray(c.options)) {
+          out.options = c.options.map((o: any) => ({
+            ...o,
+            label: typeof o.label === "string" ? interp(o.label, vars) : o.label,
+            description: typeof o.description === "string" ? interp(o.description, vars) : o.description,
+          }));
+        }
+        return out;
+      }),
+    };
+  });
+}
+
 export interface ApplyOptions {
   vars?: Record<string, any>;
-  keepFields?: boolean; // if true, original fields are kept when template doesn't define any
+  keepFields?: boolean;
 }
 
 export async function applyTemplate(
@@ -153,19 +183,29 @@ export async function applyTemplate(
   slot: string,
   baseEmbed: any,
   opts: ApplyOptions = {},
-): Promise<{ embed: any; content?: string }> {
+): Promise<{ embed: any; content?: string; components?: any[] }> {
   const tpl = await getTemplate(guildId, slot);
   if (!tpl || !tpl.enabled) return { embed: baseEmbed };
   const v = opts.vars ?? {};
   const out: any = { ...baseEmbed };
 
-  if (tpl.title) out.title = interp(tpl.title, v);
+  if (tpl.title) {
+    out.title = interp(tpl.title, v);
+    if (tpl.title_url) out.url = interp(tpl.title_url, v);
+  }
   if (tpl.description) out.description = interp(tpl.description, v);
   if (typeof tpl.color === "number") out.color = tpl.color;
   if (tpl.footer_text) out.footer = { text: interp(tpl.footer_text, v) };
   if (tpl.thumbnail_url) out.thumbnail = { url: tpl.thumbnail_url };
   if (tpl.image_url) out.image = { url: tpl.image_url };
   if (tpl.show_timestamp) out.timestamp = new Date().toISOString();
+  if (tpl.author_name) {
+    out.author = {
+      name: interp(tpl.author_name, v) ?? "",
+      ...(tpl.author_icon_url ? { icon_url: tpl.author_icon_url } : {}),
+      ...(tpl.author_url ? { url: interp(tpl.author_url, v) } : {}),
+    };
+  }
 
   if (Array.isArray(tpl.fields) && tpl.fields.length) {
     out.fields = tpl.fields.map((f: any) => ({
@@ -173,9 +213,15 @@ export async function applyTemplate(
       value: interp(f.value, v) ?? "",
       inline: !!f.inline,
     }));
-  } else if (!opts.keepFields) {
-    // leave baseEmbed.fields alone
   }
 
-  return { embed: out, content: tpl.content ? interp(tpl.content, v) : undefined };
+  const components = Array.isArray(tpl.components) && tpl.components.length
+    ? interpComponents(tpl.components, v)
+    : undefined;
+
+  return {
+    embed: out,
+    content: tpl.content ? interp(tpl.content, v) : undefined,
+    components,
+  };
 }
