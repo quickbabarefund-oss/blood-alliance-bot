@@ -1,50 +1,99 @@
 ## Goal
-Make the FWA Points verdict visible everywhere a war is shown, and fix the reason `/current_war` says "verdict not yet posted" — `points.fwafarm.com` is behind a Cloudflare bot challenge, so our edge fetch (with a `ValkonWarBot` UA) is being served the JS-challenge page instead of the real HTML, so `winner-box` never matches.
 
-## Changes
+Turn the current limited Embed Editor into a fully customizable, dynamic embed + message builder that matches what Discord supports — author block, advanced fields, buttons & select menus, full color picker, per-slot placeholders, and a true Discord-style live preview.
 
-### 1. Fix the FWA Points fetch (`supabase/functions/_shared/fwa_points.ts`)
-- Send realistic browser headers so Cloudflare lets us through:
-  `User-Agent: Mozilla/5.0 ... Chrome/124 Safari/537.36`, `Accept: text/html,...`, `Accept-Language: en-US,en;q=0.9`, `Referer: https://points.fwafarm.com/`, `Sec-Fetch-*` headers.
-- Detect a challenge response (HTML contains `Just a moment` / `cf_chl_opt` / no `winner-box`) and log a clear `"fwa points: cloudflare challenge"` line, return `null` with a typed reason so callers can show "blocked" vs "no verdict yet".
-- Add a short in-memory cache (5 min, keyed by clan tag) so we don't hammer fwafarm for every poll + every `/current_war`.
-- Extend the return shape with `winCalculatorUrl` and `warId` already-extracted so embeds can deep-link.
+## What changes
 
-### 2. Persist the verdict on the war row
-Add new columns to `public.wars` so the verdict is shown even if fwafarm is temporarily blocked:
-- `fwa_decision text` (`win` | `lose`)
-- `fwa_reason text`
-- `fwa_winner_name text`
-- `fwa_winner_tag text`
-- `fwa_war_id text`
-- `fwa_checked_at timestamptz`
+### 1. Embed schema upgrade
 
-`war-poll` writes these whenever `fetchFwaRecommendation` succeeds (in both preparation and battle day), independent of the auto-decision logic. Auto-decision still only fires on battle day when `decision` is unset, exactly like today.
+Extend `embed_templates` with the missing Discord embed fields:
 
-### 3. Show FWA Verdict on the Reps approval embed (`_shared/war.ts` → `buildRepsPayload`)
-Add a new field (only when `matchType === "FWA"`):
-- ✅ Verdict known →
-  `🍫 FWA Verdict` : `🏆 WIN — points (10 > 6)` + `[Win Calculator ↗](https://points.fwafarm.com/clan?tag=...)`
-- ⏳ Not posted yet → `_FWA match — verdict not yet posted on points.fwafarm.com_`
-- 🛑 Cloudflare blocked us → `_Could not reach points.fwafarm.com (rate limited) — will retry_`
+- `author_name`, `author_icon_url`, `author_url`
+- `title_url` (clickable title)
+- `image_height`, no — Discord doesn't allow. Stick to what's supported.
+- `components` (jsonb) — action rows of buttons / link buttons / select menus
 
-`war-poll` calls `editMessage` to refresh the reps embed when the verdict first appears, so an embed posted in preparation gets updated once fwafarm publishes the verdict.
+Migration adds the new columns (nullable, safe defaults) plus GRANTs preserved. `embed_templates.fields` already exists for custom fields.
 
-### 4. Update `/current_war` (`_shared/coc_commands.ts`)
-Use the cached/persisted verdict from `wars` first, fall back to a live fetch. Same three-state field text as above so "blocked" and "not yet posted" are no longer confused.
+### 2. New Embed Editor UI (`src/pages/EmbedEditor.tsx`)
 
-### 5. Show decision + FWA verdict on the War UI (`src/pages/WarTracker.tsx`)
-The current page already lists wars from the `wars` table. Add two columns / badges to each war row:
-- **Strategy** — `WIN` / `LOSE` / `MISS` badge from `wars.decision` (with "auto-fwa" / "manual" tag from `decided_by`), or `—` if unset.
-- **FWA Verdict** — `🏆 WIN` / `🏳️ LOSE` badge from `wars.fwa_decision` with `fwa_reason` as tooltip, link icon to the Win Calculator. Shown only for `match_type = 'FWA'`.
+Replace the single flat form with a tabbed editor inside the existing left-sidebar layout:
 
-No other UI restructuring.
+```text
+[ Sidebar: slots ]   [ Tabs: Content | Embed | Fields | Components | Placeholders ]   [ Live Preview ]
+```
 
-### 6. Re-deploy edge functions
-`war-poll`, `discord-interactions`, `war-tracker-api` (the last reads `wars` and must surface the new columns).
+- **Content tab**: message `content` text, markdown helpers (B / I / U / S / code / link / mention chips), placeholder chip inserter.
+- **Embed tab**:
+  - Author block (name + icon URL + URL) with avatar preview
+  - Title + title URL
+  - Description with markdown toolbar
+  - Footer text + footer icon + show timestamp toggle
+  - Thumbnail URL + main image URL with thumbnail previews
+  - Full color picker: HSL sliders + hex input + 12 curated preset swatches + "recent colors" stored in localStorage
+- **Fields tab**:
+  - Add / remove / drag-to-reorder up to 25 fields (using `@dnd-kit/core` already lightweight, or simple up/down buttons to avoid new deps)
+  - Per field: name, value (with markdown toolbar + placeholder chips), inline toggle
+  - Inline validation: name ≤ 256, value ≤ 1024, totals ≤ 6000
+- **Components tab** (new):
+  - Up to 5 action rows
+  - Per row: add Button, Link Button, or Select Menu
+  - Button: label, style (Primary/Secondary/Success/Danger), emoji, custom_id, disabled
+  - Link Button: label, URL, emoji
+  - Select Menu: placeholder, min/max values, up to 25 options (label, value, description, emoji, default)
+  - Drag-to-reorder rows and items
+- **Placeholders tab**:
+  - Lists every `{placeholder}` available for the active slot with its description
+  - Click to insert into the focused input
+  - "Sample values" editor so the live preview renders real-looking data
 
-## Technical notes
-- New columns are nullable + default `null`, so no backfill needed.
-- The Reps embed update on verdict-arrival reuses `buildRepsPayload` and `editMessage`; buttons row is preserved by passing `components: [buildDecisionButtons(war.id)]`.
-- `WarTracker.tsx` reads `wars` via the existing supabase client — RLS for `wars` is `deny all client access`, so reads go through `war-tracker-api`; add `fwa_*` and `decision`/`decided_by` to the response shape there.
-- No new secrets, no schema breakage.
+### 3. Dynamic Response Builder (live preview)
+
+A faithful Discord-style preview panel pinned to the right:
+
+- Renders content + embed exactly like Discord (dark theme by default, toggle for light + mobile widths)
+- Substitutes `{placeholder}` tokens using the Sample Values from the Placeholders tab
+- Renders markdown (bold, italic, underline, strike, inline code, code blocks, links, headers, lists, blockquotes, masked links, user/role/channel mentions)
+- Renders timestamp tokens like `<t:1700000000:R>` as relative time
+- Renders the components row (buttons + select menus) with correct Discord styles
+- Live updates as you type (debounced 100 ms)
+
+### 4. Backend (`supabase/functions/embed-templates-api/index.ts`)
+
+- Accept and persist the new fields (`author_*`, `title_url`, `components`)
+- Validate component payloads server-side (row count ≤ 5, items per row ≤ 5 for buttons / 1 for select, option count ≤ 25, custom_id uniqueness)
+- Keep the existing token + slot + war-clan endpoints unchanged
+
+### 5. Bot side (`supabase/functions/_shared/embed_templates.ts`)
+
+- `applyTemplate` interpolates placeholders into the new author/title-URL fields
+- Returned object now also includes `components` so callers can attach them to the Discord message payload
+- Update every call site (`current_war`, `war_started`, `war_win`, `war_lose`, family dashboard, etc.) to forward `components` when present
+
+### 6. Per-slot placeholder expansion
+
+Add more placeholders per slot in `SLOT_PLACEHOLDERS` + `SLOT_PLACEHOLDER_DESCRIPTIONS` so each embed can be "customized for the proper detail" the user mentioned. Examples:
+
+- `war_started`: + `our_tag`, `opp_tag`, `our_badge`, `opp_badge`, `our_level`, `opp_level`, `start_time`, `prep_end`
+- `war_win` / `war_lose`: + `our_avg_th`, `opp_avg_th`, `attacks_used`, `attacks_total`, `mvp_name`, `mvp_stars`
+- `current_war`: + `state`, `stars`, `opp_stars`, `destruction`, `opp_destruction`, `attacks_used`, `time_left`
+- `clan_info`: + `wars_won`, `wars_lost`, `cwl_league`, `capital_hall`, `clan_points`, `versus_points`
+- `player_info`: + `role`, `donations`, `received`, `war_stars`, `attack_wins`, `xp`
+
+All call sites in `_shared/war.ts`, `_shared/coc_commands.ts`, `_shared/family.ts` populate the new variables.
+
+## Technical details
+
+- Migration is additive; no data loss. All new columns nullable so existing templates keep working.
+- Components are stored as the exact Discord component JSON shape (`{ type: 1, components: [...] }`) so the bot can attach them directly to message payloads.
+- Live preview is pure React (no iframe). A small markdown renderer (~150 lines) covers the Discord-supported subset — no new dependency.
+- Drag-to-reorder uses native HTML5 DnD to avoid adding a library.
+- Color picker uses `react-colorful` (tiny, ~3 KB) added via `bun add react-colorful`.
+- Placeholder insertion tracks the last-focused input with a ref so chip clicks insert at the caret.
+- Sample values for placeholders are stored in `localStorage` per (guild, slot) — never sent to server.
+
+## Out of scope
+
+- Modals / forms triggered by buttons (would need bot interaction handlers; can be a follow-up)
+- Multiple embeds per message (Discord supports 10, but this would require a bigger schema change — flag this as a follow-up if you want it)
+- File attachments in embeds
