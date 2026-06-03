@@ -926,64 +926,6 @@ function DiscordPreview({ tpl, sampleValues }: { tpl: Template; sampleValues: Re
     </div>
   );
 }
-
-function EmojiBar() {
-  const copy = (e: string) => {
-    navigator.clipboard.writeText(e);
-    toast({ title: "Emoji copied", description: `${e} → clipboard.` });
-  };
-  return (
-    <div className="rounded-md border border-border bg-muted/30 p-3">
-      <div className="mb-1.5 text-xs uppercase tracking-wide text-muted-foreground">Emoji palette (click to copy)</div>
-      <div className="flex flex-wrap gap-1">
-        {EMOJI_PALETTE.map((e) => (
-          <button key={e} type="button" onClick={() => copy(e)}
-            className="rounded px-1.5 py-0.5 text-lg hover:bg-secondary">
-            {e}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DiscordEmbedPreview({ tpl }: { tpl: Template }) {
-  const color = useMemo(() => colorToHex(tpl.color), [tpl.color]);
-  if (!tpl.enabled) {
-    return <Card className="p-4 text-sm text-muted-foreground">Disabled — bot will use built-in embed.</Card>;
-  }
-  return (
-    <div className="rounded-md bg-[#313338] p-4 text-[#dcddde]" style={{ fontFamily: "system-ui, sans-serif" }}>
-      {tpl.content && <div className="mb-2 whitespace-pre-wrap text-sm">{tpl.content}</div>}
-      <div className="flex gap-3 rounded-md bg-[#2b2d31] p-3" style={{ borderLeft: `4px solid ${color}` }}>
-        <div className="min-w-0 flex-1">
-          {tpl.title && <div className="mb-1 font-semibold text-white">{tpl.title}</div>}
-          {tpl.description && <div className="mb-2 whitespace-pre-wrap text-sm">{tpl.description}</div>}
-          {tpl.fields.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-x-4 gap-y-2">
-              {tpl.fields.map((f, i) => (
-                <div key={i} className={f.inline ? "min-w-[120px] flex-1" : "w-full"}>
-                  <div className="text-sm font-semibold text-white">{f.name}</div>
-                  <div className="whitespace-pre-wrap text-sm">{f.value}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {tpl.image_url && <img src={tpl.image_url} alt="" className="mt-2 max-h-64 rounded" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />}
-          {(tpl.footer_text || tpl.show_timestamp) && (
-            <div className="mt-2 text-xs text-[#949ba4]">
-              {tpl.footer_text}
-              {tpl.footer_text && tpl.show_timestamp ? " • " : ""}
-              {tpl.show_timestamp ? new Date().toLocaleString() : ""}
-            </div>
-          )}
-        </div>
-        {tpl.thumbnail_url && <img src={tpl.thumbnail_url} alt="" className="h-20 w-20 shrink-0 rounded object-cover" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />}
-      </div>
-    </div>
-  );
-}
-
 const ANNOUNCEMENT_PLACEHOLDERS: Array<[string, string]> = [
   ["{opponent}", "Opponent clan name"],
   ["{opp_tag}", "Opponent clan tag"],
