@@ -271,7 +271,11 @@ export type Database = {
       }
       embed_templates: {
         Row: {
+          author_icon_url: string | null
+          author_name: string | null
+          author_url: string | null
           color: number | null
+          components: Json
           content: string | null
           description: string | null
           enabled: boolean
@@ -284,10 +288,15 @@ export type Database = {
           slot: string
           thumbnail_url: string | null
           title: string | null
+          title_url: string | null
           updated_at: string
         }
         Insert: {
+          author_icon_url?: string | null
+          author_name?: string | null
+          author_url?: string | null
           color?: number | null
+          components?: Json
           content?: string | null
           description?: string | null
           enabled?: boolean
@@ -300,10 +309,15 @@ export type Database = {
           slot: string
           thumbnail_url?: string | null
           title?: string | null
+          title_url?: string | null
           updated_at?: string
         }
         Update: {
+          author_icon_url?: string | null
+          author_name?: string | null
+          author_url?: string | null
           color?: number | null
+          components?: Json
           content?: string | null
           description?: string | null
           enabled?: boolean
@@ -316,6 +330,7 @@ export type Database = {
           slot?: string
           thumbnail_url?: string | null
           title?: string | null
+          title_url?: string | null
           updated_at?: string
         }
         Relationships: []
