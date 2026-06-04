@@ -15,6 +15,7 @@ import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, load
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
   buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks, resolveLinksForTags,
+  buildRemaining, buildLineup, buildCwlRound, buildCurrentCwlWar, callerAssign, callerClear, rememberClanTag,
 } from "../_shared/coc_commands.ts";
 import { buildPlayerActivity, buildPlayerJoins } from "../_shared/player_activity.ts";
 
