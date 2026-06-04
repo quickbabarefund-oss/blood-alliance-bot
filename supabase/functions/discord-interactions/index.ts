@@ -64,6 +64,7 @@ const RESP_AUTOCOMPLETE = 8;
 const COC_AUTOCOMPLETE_CMDS = new Set([
   "clan_info","current_war","war_log","clan_members",
   "cwl","cwl_roster","cwl_board","capital_raids","compo",
+  "war","warlog","remaining","lineup","cwl_round","current_cwl_war","caller",
 ]);
 const PLAYER_AUTOCOMPLETE_CMDS = new Set(["player_activity","player_joins"]);
 
