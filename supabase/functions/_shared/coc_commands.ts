@@ -892,7 +892,6 @@ export async function rememberClanTag(guildId: string, tag: string): Promise<voi
       guild_id: guildId, clan_tag: norm, clan_name: name, last_used_at: new Date().toISOString(),
     }, { onConflict: "guild_id,clan_tag" });
     // Bump use_count
-    await sb.rpc("noop_no_existing"); // ignored if missing
   } catch (e) { console.error("rememberClanTag", e); }
 }
 
