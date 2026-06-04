@@ -354,7 +354,7 @@ export async function buildCwl(guildId: string, args: { tag?: string; targetUser
   const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
   const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let g: any;
-  try { g = await postCoc({ action: "cwl_group", tag }); } catch (e) {
+  try { g = await fetchCwlGroupCached(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
   }
   if (!g || g.state === "notInWar") {
@@ -461,7 +461,7 @@ export async function buildCwlRoster(guildId: string, args: { tag?: string; targ
   const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
   const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let g: any;
-  try { g = await postCoc({ action: "cwl_group", tag }); } catch (e) {
+  try { g = await fetchCwlGroupCached(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
   }
   if (!g || g.state === "notInWar" || !g.clans?.length) {
@@ -511,7 +511,7 @@ export async function buildCwlBoard(guildId: string, args: { tag?: string; targe
   const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
   const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
   let g: any;
-  try { g = await postCoc({ action: "cwl_group", tag }); } catch (e) {
+  try { g = await fetchCwlGroupCached(tag); } catch (e) {
     return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
   }
   if (!g || g.state === "notInWar" || !g.clans?.length) {
@@ -596,3 +596,302 @@ export async function buildCwlBoard(guildId: string, args: { tag?: string; targe
   };
   return await send(guildId, "cwl_board", base, { season: g.season, tag, rank: myRank });
 }
+
+// ---------- /remaining ----------
+// Shows remaining/missed war hits for the current war.
+export async function buildRemaining(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
+  let cw: any;
+  try { cw = await postCoc({ action: "current_war", tag }); } catch (e) {
+    return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
+  }
+  if (!cw || cw.state === "notInWar" || !cw.clan) {
+    return { embeds: [{ title: "🕊️ Not in war", description: `\`${tag}\` is not currently in a war.`, color: COLOR_GOLD }] };
+  }
+  const isPrep = cw.state === "preparation";
+  const isEnded = cw.state === "warEnded";
+  const perPlayer = cw.attacksPerMember ?? 2;
+  const thMap = await loadThEmojis();
+  const members: any[] = (cw.clan.members ?? []).slice().sort((a: any, b: any) => a.mapPosition - b.mapPosition);
+  const noHits: any[] = [];
+  const oneHit: any[] = [];
+  for (const m of members) {
+    const used = (m.attacks ?? []).length;
+    const remaining = perPlayer - used;
+    if (remaining <= 0) continue;
+    const line = `\`${String(m.mapPosition).padStart(2)}.\` ${thEmoji(thMap, m.townhallLevel)} **${m.name}** \`${m.tag}\` — **${remaining}** left`;
+    if (used === 0) noHits.push(line); else oneHit.push(line);
+  }
+  const totalRemaining = noHits.length * perPlayer + oneHit.length;
+  const heading = isEnded ? "❌ Missed Hits" : isPrep ? "🗡️ Hits to use (Prep)" : "🗡️ Remaining Hits";
+  const fields: any[] = [
+    { name: "Status", value: isPrep ? "📦 Preparation" : isEnded ? "🏁 Ended" : "⚔️ Battle Day", inline: true },
+    { name: "Team", value: `${cw.teamSize ?? "—"} vs ${cw.teamSize ?? "—"}`, inline: true },
+    { name: "Total left", value: String(totalRemaining), inline: true },
+  ];
+  if (noHits.length) fields.push({ name: `🚫 No hits (${noHits.length})`, value: noHits.join("\n").slice(0, 1024), inline: false });
+  if (oneHit.length) fields.push({ name: `⚠️ One hit left (${oneHit.length})`, value: oneHit.join("\n").slice(0, 1024), inline: false });
+  if (!noHits.length && !oneHit.length) fields.push({ name: "✅ All hits used", value: "Every player has used all their attacks.", inline: false });
+  const base = {
+    title: `${heading} — ${cw.clan.name ?? tag}`,
+    description: `vs **${cw.opponent?.name ?? "?"}** \`${cw.opponent?.tag ?? ""}\``,
+    color: totalRemaining ? COLOR_GOLD : COLOR_GREEN,
+    thumbnail: cw.clan.badgeUrls?.medium ? { url: cw.clan.badgeUrls.medium } : undefined,
+    fields,
+  };
+  return await send(guildId, "remaining", base, { tag, remaining: totalRemaining });
+}
+
+// ---------- /lineup ----------
+// Ordered roster + mirror opponent (+ called target if any).
+export async function buildLineup(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:` or link a player with `/link player`.")], flags: 64 };
+  let cw: any;
+  try { cw = await postCoc({ action: "current_war", tag }); } catch (e) {
+    return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
+  }
+  if (!cw || cw.state === "notInWar" || !cw.clan || !cw.opponent) {
+    return { embeds: [{ title: "🕊️ Not in war", description: `\`${tag}\` is not currently in a war.`, color: COLOR_GOLD }] };
+  }
+  const thMap = await loadThEmojis();
+  const oppByPos: Record<number, any> = {};
+  for (const m of (cw.opponent.members ?? [])) oppByPos[m.mapPosition] = m;
+
+  // Load any active callers for this clan
+  const sb = adminClient();
+  const { data: callers } = await sb.from("war_callers")
+    .select("attacker_tag,defender_pos,defender_name").eq("guild_id", guildId).eq("clan_tag", tag);
+  const callerMap = new Map<string, { pos?: number; name?: string }>();
+  for (const c of (callers ?? []) as any[]) callerMap.set(c.attacker_tag, { pos: c.defender_pos, name: c.defender_name });
+
+  const members: any[] = (cw.clan.members ?? []).slice().sort((a: any, b: any) => a.mapPosition - b.mapPosition);
+  const lines = members.map((m) => {
+    const mirror = oppByPos[m.mapPosition];
+    const mirrorStr = mirror ? `${thEmoji(thMap, mirror.townhallLevel)} ${mirror.name}` : "—";
+    const c = callerMap.get(m.tag);
+    const callTag = c?.pos ? ` 🎯 #${c.pos}${c.name ? ` ${c.name}` : ""}` : "";
+    return `\`${String(m.mapPosition).padStart(2)}.\` ${thEmoji(thMap, m.townhallLevel)} **${m.name}** vs ${mirrorStr}${callTag}`;
+  });
+  const chunks: string[] = [];
+  let buf = "";
+  for (const ln of lines) {
+    if (buf.length + ln.length + 1 > 1000) { chunks.push(buf); buf = ln; } else { buf = buf ? `${buf}\n${ln}` : ln; }
+  }
+  if (buf) chunks.push(buf);
+  const fields = chunks.map((v, i) => ({ name: i === 0 ? `Lineup (${members.length})` : `Lineup (cont. ${i + 1})`, value: v, inline: false }));
+  const base = {
+    title: `📋 Lineup — ${cw.clan.name ?? tag}`,
+    description: `vs **${cw.opponent.name}** \`${cw.opponent.tag}\` • ${cw.teamSize}v${cw.teamSize}`,
+    color: COLOR,
+    thumbnail: cw.clan.badgeUrls?.medium ? { url: cw.clan.badgeUrls.medium } : undefined,
+    fields,
+  };
+  return await send(guildId, "lineup", base, { tag, opponent: cw.opponent.name });
+}
+
+// ---------- /cwl_round ----------
+// Summary for the current round's war (our pair only).
+export async function buildCwlRound(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const round = await fetchCwlRoundForClan(args);
+  if ("error" in round) return { embeds: [errEmbed(round.error)], flags: 64 };
+  const { war, tag } = round;
+  const ours = war.clan?.tag === tag ? war.clan : war.opponent;
+  const opp = ours === war.clan ? war.opponent : war.clan;
+  if (!ours || !opp) return { embeds: [errEmbed("Could not identify clan in CWL war.")], flags: 64 };
+  const stateLabel = war.state === "preparation" ? "📦 Preparation" : war.state === "inWar" ? "⚔️ Battle Day" : "🏁 Ended";
+  const end = parseCocTime(war.endTime ?? "")?.getTime();
+  const usedOurs = (ours.members ?? []).reduce((n: number, m: any) => n + (m.attacks?.length ?? 0), 0);
+  const usedOpp = (opp.members ?? []).reduce((n: number, m: any) => n + (m.attacks?.length ?? 0), 0);
+  const fields = [
+    { name: "Status", value: stateLabel, inline: true },
+    { name: "Team", value: `${war.teamSize ?? "—"} vs ${war.teamSize ?? "—"}`, inline: true },
+    { name: "Ends", value: end ? `<t:${Math.floor(end / 1000)}:R>` : "—", inline: true },
+    { name: "⭐ Stars", value: `**${ours.stars ?? 0}** vs ${opp.stars ?? 0}`, inline: true },
+    { name: "💥 Destruction", value: `**${(ours.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%** vs ${(opp.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%`, inline: true },
+    { name: "🗡️ Attacks", value: `${usedOurs}/${war.teamSize ?? 0} vs ${usedOpp}/${war.teamSize ?? 0}`, inline: true },
+    { name: "🔗 Links", value: `[Us — ChocolateClash](${ccClanLink(ours.tag)}) • [Opp — ChocolateClash](${ccClanLink(opp.tag)})`, inline: false },
+  ];
+  const base = {
+    title: `🛡️ CWL Round — ${ours.name} vs ${opp.name}`,
+    color: COLOR,
+    thumbnail: ours.badgeUrls?.medium ? { url: ours.badgeUrls.medium } : undefined,
+    fields,
+  };
+  return await send(guildId, "cwl_round", base, { tag, our: ours.name, opponent: opp.name });
+}
+
+// ---------- /current_cwl_war ----------
+// Detailed live current CWL war (per-attacker feed).
+export async function buildCurrentCwlWar(guildId: string, args: { tag?: string; targetUser?: string; caller: string }) {
+  const round = await fetchCwlRoundForClan(args);
+  if ("error" in round) return { embeds: [errEmbed(round.error)], flags: 64 };
+  const { war, tag } = round;
+  const ours = war.clan?.tag === tag ? war.clan : war.opponent;
+  const opp = ours === war.clan ? war.opponent : war.clan;
+  if (!ours || !opp) return { embeds: [errEmbed("Could not identify clan in CWL war.")], flags: 64 };
+  const thMap = await loadThEmojis();
+  const oppByTag: Record<string, number> = {};
+  for (const m of (opp.members ?? [])) oppByTag[m.tag] = m.mapPosition;
+  const attacks: any[] = [];
+  for (const m of (ours.members ?? [])) {
+    for (const a of (m.attacks ?? [])) {
+      attacks.push({ m, a, defPos: oppByTag[a.defenderTag] ?? "?" });
+    }
+  }
+  attacks.sort((x, y) => y.a.order - x.a.order);
+  const feed = attacks.slice(0, 10).map(({ m, a, defPos }) => {
+    const stars = "⭐".repeat(a.stars) + "·".repeat(3 - a.stars);
+    return `${thEmoji(thMap, m.townhallLevel)} **${m.name}** (#${m.mapPosition}) → #${defPos} ${stars} ${Math.round(a.destructionPercentage)}%`;
+  }).join("\n") || "_No attacks yet._";
+
+  const end = parseCocTime(war.endTime ?? "")?.getTime();
+  const stateLabel = war.state === "preparation" ? "📦 Preparation" : war.state === "inWar" ? "⚔️ Battle Day" : "🏁 Ended";
+  const usedOurs = attacks.length;
+  const usedOpp = (opp.members ?? []).reduce((n: number, m: any) => n + (m.attacks?.length ?? 0), 0);
+  const fields = [
+    { name: "Status", value: stateLabel, inline: true },
+    { name: "Team", value: `${war.teamSize ?? "—"}`, inline: true },
+    { name: "Ends", value: end ? `<t:${Math.floor(end / 1000)}:R>` : "—", inline: true },
+    { name: "⭐ Stars", value: `**${ours.stars ?? 0}** vs ${opp.stars ?? 0}`, inline: true },
+    { name: "💥 Destruction", value: `**${(ours.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%** vs ${(opp.destructionPercentage ?? 0).toFixed?.(2) ?? 0}%`, inline: true },
+    { name: "🗡️ Attacks", value: `${usedOurs}/${war.teamSize ?? 0} vs ${usedOpp}/${war.teamSize ?? 0}`, inline: true },
+    { name: "🔁 Recent attacks", value: feed.slice(0, 1024), inline: false },
+  ];
+  const base = {
+    title: `🛡️ Current CWL War — ${ours.name} vs ${opp.name}`,
+    color: COLOR,
+    thumbnail: ours.badgeUrls?.medium ? { url: ours.badgeUrls.medium } : undefined,
+    fields,
+  };
+  return await send(guildId, "current_cwl_war", base, { tag, our: ours.name, opponent: opp.name });
+}
+
+// Helper: locate the current CWL round war for a clan.
+async function fetchCwlRoundForClan(args: { tag?: string; targetUser?: string; caller: string }):
+  Promise<{ war: any; tag: string } | { error: string }>
+{
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { error: rt.error ?? "Provide a `tag:` or link a player with `/link player`." };
+  let g: any;
+  try { g = await fetchCwlGroupCached(tag); } catch (e) {
+    return { error: `\`${tag}\`: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (!g || g.state === "notInWar" || !g.rounds?.length) {
+    return { error: `\`${tag}\` is not currently in CWL.` };
+  }
+  const rounds = (g.rounds ?? []).filter((r: any) => (r.warTags ?? []).some((t: string) => t && t !== "#0"));
+  // Walk rounds from latest to earliest; pick the most recent war involving `tag` that isn't already past.
+  for (let i = rounds.length - 1; i >= 0; i--) {
+    const wts = (rounds[i].warTags ?? []).filter((t: string) => t && t !== "#0");
+    for (const wt of wts) {
+      try {
+        const w: any = await postCocWithTimeout({ action: "cwl_war", tag: wt }, 10_000);
+        if (!w?.clan || !w?.opponent) continue;
+        if (w.clan.tag === tag || w.opponent.tag === tag) {
+          return { war: w, tag };
+        }
+      } catch (_e) { /* skip */ }
+    }
+  }
+  return { error: `Could not find a CWL war for \`${tag}\`.` };
+}
+
+// 5-minute cache + 12s timeout + 1 retry for cwl_group (large response).
+const CWL_GROUP_CACHE = new Map<string, { at: number; data: any }>();
+const CWL_GROUP_TTL_MS = 5 * 60_000;
+export async function fetchCwlGroupCached(tag: string): Promise<any> {
+  const key = tag.toUpperCase();
+  const hit = CWL_GROUP_CACHE.get(key);
+  if (hit && Date.now() - hit.at < CWL_GROUP_TTL_MS) return hit.data;
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const data = await postCocWithTimeout({ action: "cwl_group", tag }, 12_000);
+      CWL_GROUP_CACHE.set(key, { at: Date.now(), data });
+      return data;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr ?? new Error("cwl_group failed");
+}
+
+// postCoc with an AbortController timeout. Falls back to plain postCoc on success.
+export async function postCocWithTimeout<T = any>(body: Record<string, any>, ms: number): Promise<T> {
+  return await Promise.race([
+    postCoc<T>(body),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`CoC timeout (${ms}ms) for ${body.action}`)), ms)),
+  ]);
+}
+
+// ---------- /caller assign|clear ----------
+export async function callerAssign(guildId: string, args: {
+  tag?: string; targetUser?: string; caller: string; playerTag: string; position: number;
+}) {
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:`.")], flags: 64 };
+  let cw: any;
+  try { cw = await postCoc({ action: "current_war", tag }); } catch (e) {
+    return { embeds: [errEmbed(`\`${tag}\`: ${e instanceof Error ? e.message : String(e)}`)], flags: 64 };
+  }
+  if (!cw || cw.state === "notInWar" || !cw.clan || !cw.opponent) {
+    return { embeds: [errEmbed(`\`${tag}\` is not currently in a war.`)], flags: 64 };
+  }
+  const attacker = (cw.clan.members ?? []).find((m: any) => normalizeTag(m.tag) === normalizeTag(args.playerTag));
+  if (!attacker) return { embeds: [errEmbed(`Player \`${args.playerTag}\` is not in the current war roster.`)], flags: 64 };
+  const defender = (cw.opponent.members ?? []).find((m: any) => m.mapPosition === args.position);
+  if (!defender) return { embeds: [errEmbed(`No opponent base at position #${args.position}.`)], flags: 64 };
+  const sb = adminClient();
+  const start = parseCocTime(cw.startTime ?? "")?.toISOString() ?? null;
+  await sb.from("war_callers").upsert({
+    guild_id: guildId, clan_tag: tag, war_start_time: start,
+    attacker_tag: attacker.tag, attacker_name: attacker.name,
+    defender_tag: defender.tag, defender_name: defender.name, defender_pos: defender.mapPosition,
+    set_by: args.caller, updated_at: new Date().toISOString(),
+  }, { onConflict: "guild_id,clan_tag,attacker_tag" });
+  return {
+    embeds: [{
+      title: "🎯 Target assigned",
+      description: `**${attacker.name}** \`${attacker.tag}\` → **#${defender.mapPosition} ${defender.name}** \`${defender.tag}\``,
+      color: COLOR_GREEN,
+    }],
+  };
+}
+
+export async function callerClear(guildId: string, args: { tag?: string; targetUser?: string; caller: string; playerTag: string }) {
+  const rt = await resolveClanTag({ explicit: args.tag, userId: args.targetUser, fallbackUserId: args.caller });
+  const tag = rt.tag; if (!tag) return { embeds: [errEmbed(rt.error ?? "Provide a `tag:`.")], flags: 64 };
+  const sb = adminClient();
+  const norm = normalizeTag(args.playerTag);
+  const { error, count } = await sb.from("war_callers")
+    .delete({ count: "exact" })
+    .eq("guild_id", guildId).eq("clan_tag", tag).eq("attacker_tag", norm);
+  if (error) return { embeds: [errEmbed(error.message)], flags: 64 };
+  return {
+    embeds: [{
+      title: count ? "🧹 Target cleared" : "ℹ️ Nothing to clear",
+      description: count ? `Cleared target for \`${norm}\`.` : `No target was set for \`${norm}\`.`,
+      color: count ? COLOR_GREEN : COLOR_GOLD,
+    }],
+  };
+}
+
+// Fire-and-forget: remember manually-typed (non-Family) clan tags so they
+// surface in autocomplete next time.
+export async function rememberClanTag(guildId: string, tag: string): Promise<void> {
+  try {
+    const sb = adminClient();
+    const norm = (tag.startsWith("#") ? tag : `#${tag}`).toUpperCase();
+    // Skip if already in family_clans
+    const { data: fam } = await sb.from("family_clans")
+      .select("clan_tag").eq("guild_id", guildId).eq("clan_tag", norm).maybeSingle();
+    if (fam) return;
+    let name = "";
+    try { const c: any = await fetchClan(norm); name = c?.name ?? ""; } catch (_e) { /* keep empty */ }
+    await sb.from("recent_clan_tags").upsert({
+      guild_id: guildId, clan_tag: norm, clan_name: name, last_used_at: new Date().toISOString(),
+    }, { onConflict: "guild_id,clan_tag" });
+    // Bump use_count
+  } catch (e) { console.error("rememberClanTag", e); }
+}
+

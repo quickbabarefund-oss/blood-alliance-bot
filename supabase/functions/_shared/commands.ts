@@ -526,5 +526,70 @@ export const COMMANDS: any[] = [
       { type: STRING, name: "clan", description: "Clan tag (defaults to first tracked clan)", autocomplete: true },
     ],
   },
+  {
+    name: "war",
+    description: "Live war summary for a clan (alias of /current_war)",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "warlog",
+    description: "Last 10 regular wars for a clan (alias of /war_log)",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "remaining",
+    description: "Show remaining or missed war hits of a clan",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "lineup",
+    description: "Displays war line-up of a clan with mirror opponents",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "cwl_round",
+    description: "CWL summary for the current round",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "current_cwl_war",
+    description: "Live CWL war detail for the current round",
+    options: [
+      { type: STRING, name: "tag", description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+      { type: USER,   name: "user", description: "Discord user (uses their linked clan tag)" },
+    ],
+  },
+  {
+    name: "caller",
+    description: "Assign or clear target bases for the current war",
+    options: [
+      { type: SUB, name: "assign", description: "Set a target for a player in the current war", options: [
+        { type: STRING,  name: "tag",      description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+        { type: STRING,  name: "player",   description: "Attacker player tag (e.g. #ABC123)", required: true },
+        { type: INTEGER, name: "position", description: "Opponent map position (1..teamSize)", required: true },
+        { type: USER,    name: "user",     description: "Discord user (uses their linked clan tag)" },
+      ]},
+      { type: SUB, name: "clear", description: "Clear a player's target in the current war", options: [
+        { type: STRING, name: "tag",    description: "Clan tag — type to search Family/recent clans", autocomplete: true },
+        { type: STRING, name: "player", description: "Attacker player tag (e.g. #ABC123)", required: true },
+        { type: USER,   name: "user",   description: "Discord user (uses their linked clan tag)" },
+      ]},
+    ],
+  },
 ];
 

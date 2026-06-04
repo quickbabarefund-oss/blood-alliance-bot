@@ -667,6 +667,30 @@ export type Database = {
         }
         Relationships: []
       }
+      recent_clan_tags: {
+        Row: {
+          clan_name: string | null
+          clan_tag: string
+          guild_id: string
+          last_used_at: string
+          use_count: number
+        }
+        Insert: {
+          clan_name?: string | null
+          clan_tag: string
+          guild_id: string
+          last_used_at?: string
+          use_count?: number
+        }
+        Update: {
+          clan_name?: string | null
+          clan_tag?: string
+          guild_id?: string
+          last_used_at?: string
+          use_count?: number
+        }
+        Relationships: []
+      }
       th_emojis: {
         Row: {
           emoji: string
@@ -734,6 +758,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      war_callers: {
+        Row: {
+          attacker_name: string | null
+          attacker_tag: string
+          clan_tag: string
+          defender_name: string | null
+          defender_pos: number | null
+          defender_tag: string | null
+          guild_id: string
+          id: number
+          set_by: string | null
+          updated_at: string
+          war_start_time: string | null
+        }
+        Insert: {
+          attacker_name?: string | null
+          attacker_tag: string
+          clan_tag: string
+          defender_name?: string | null
+          defender_pos?: number | null
+          defender_tag?: string | null
+          guild_id: string
+          id?: number
+          set_by?: string | null
+          updated_at?: string
+          war_start_time?: string | null
+        }
+        Update: {
+          attacker_name?: string | null
+          attacker_tag?: string
+          clan_tag?: string
+          defender_name?: string | null
+          defender_pos?: number | null
+          defender_tag?: string | null
+          guild_id?: string
+          id?: number
+          set_by?: string | null
+          updated_at?: string
+          war_start_time?: string | null
+        }
+        Relationships: []
       }
       war_reminders: {
         Row: {

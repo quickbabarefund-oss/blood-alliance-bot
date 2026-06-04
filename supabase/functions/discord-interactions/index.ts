@@ -15,6 +15,7 @@ import { buildDashboardPayload, buildClanDetailEmbed, syncDashboardMessage, load
 import {
   buildPlayerInfo, buildClanInfo, buildCurrentWar, buildWarLog,
   buildClanMembers, buildCwl, buildCwlRoster, buildCwlBoard, buildCapitalRaids, buildCompo, fetchLiveUserLinks, resolveLinksForTags,
+  buildRemaining, buildLineup, buildCwlRound, buildCurrentCwlWar, callerAssign, callerClear, rememberClanTag,
 } from "../_shared/coc_commands.ts";
 import { buildPlayerActivity, buildPlayerJoins } from "../_shared/player_activity.ts";
 
@@ -63,6 +64,7 @@ const RESP_AUTOCOMPLETE = 8;
 const COC_AUTOCOMPLETE_CMDS = new Set([
   "clan_info","current_war","war_log","clan_members",
   "cwl","cwl_roster","cwl_board","capital_raids","compo",
+  "war","warlog","remaining","lineup","cwl_round","current_cwl_war","caller",
 ]);
 const PLAYER_AUTOCOMPLETE_CMDS = new Set(["player_activity","player_joins"]);
 
@@ -1559,6 +1561,12 @@ const COC_BUILDERS: Record<string, (guildId: string, args: { tag?: string; targe
   compo: buildCompo,
   player_activity: buildPlayerActivity,
   player_joins: buildPlayerJoins,
+  war: buildCurrentWar,
+  warlog: buildWarLog,
+  remaining: buildRemaining,
+  lineup: buildLineup,
+  cwl_round: buildCwlRound,
+  current_cwl_war: buildCurrentCwlWar,
 };
 
 async function fetchUserLinks(userId: string): Promise<Array<{ player_tag: string; name: string }>> {
@@ -1625,9 +1633,43 @@ async function handleCocCmd(
       }
       const data = await builder(guildId, { tag, targetUser, caller });
       await followUpPayload(appId, token, { ...data, flags: 0 });
+      // Remember manually-typed clan tags so they show up in autocomplete next time.
+      if (tag && guildId) runAfterResponse(rememberClanTag(guildId, tag));
     } catch (e) {
       console.error("coc cmd failed", e);
-      await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true);
+      try { await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true); } catch (_) {}
+    }
+  })());
+  return deferred(false);
+}
+
+// /caller assign | /caller clear
+async function handleCaller(interaction: any): Promise<Response> {
+  const guildId = interaction.guild_id ?? "";
+  const appId = interaction.application_id;
+  const token = interaction.token;
+  const { sub, options } = getSubOptions(interaction.data?.options);
+  const tag = getOpt(options, "tag");
+  const targetUser = getOpt(options, "user");
+  const caller = callerUserId(interaction);
+  const playerTag = String(getOpt(options, "player") ?? "");
+
+  runAfterResponse((async () => {
+    try {
+      let data: any;
+      if (sub === "assign") {
+        const position = Number(getOpt(options, "position") ?? 0);
+        data = await callerAssign(guildId, { tag, targetUser, caller, playerTag, position });
+      } else if (sub === "clear") {
+        data = await callerClear(guildId, { tag, targetUser, caller, playerTag });
+      } else {
+        data = { content: `Unknown subcommand: ${sub}`, flags: 64 };
+      }
+      await followUpPayload(appId, token, { allowed_mentions: { parse: [] }, ...data });
+      if (tag && guildId) runAfterResponse(rememberClanTag(guildId, tag));
+    } catch (e) {
+      console.error("/caller failed", e);
+      try { await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true); } catch (_) {}
     }
   })());
   return deferred(false);
@@ -1964,7 +2006,12 @@ Deno.serve(async (req) => {
   if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE) {
     try {
       const cmdName = interaction.data?.name ?? "";
-      const focused = (interaction.data?.options ?? []).find((o: any) => o.focused);
+      // Drill into subcommand options so /caller assign exposes its `tag` opt.
+      let optList: any[] = interaction.data?.options ?? [];
+      while (optList.length && optList[0]?.type === 1 /* SUB */ && optList[0].options) {
+        optList = optList[0].options;
+      }
+      const focused = optList.find((o: any) => o.focused);
       if (!focused || focused.name !== "tag") {
         return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
       }
@@ -2004,19 +2051,39 @@ Deno.serve(async (req) => {
       if (!COC_AUTOCOMPLETE_CMDS.has(cmdName)) {
         return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
       }
-      const { data: rows } = await sb.from("family_clans")
-        .select("clan_tag,clan_name,category_id,position")
-        .eq("guild_id", guildId)
-        .order("position")
-        .limit(200);
-      const list = (rows ?? []) as any[];
+      const [{ data: famRows }, { data: recentRows }] = await Promise.all([
+        sb.from("family_clans")
+          .select("clan_tag,clan_name,category_id,position")
+          .eq("guild_id", guildId)
+          .order("position")
+          .limit(200),
+        sb.from("recent_clan_tags")
+          .select("clan_tag,clan_name,last_used_at")
+          .eq("guild_id", guildId)
+          .gte("last_used_at", new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
+          .order("last_used_at", { ascending: false })
+          .limit(25),
+      ]);
+      const seen = new Set<string>();
+      const merged: Array<{ tag: string; name: string; recent: boolean }> = [];
+      for (const r of (famRows ?? []) as any[]) {
+        const t = String(r.clan_tag).toUpperCase();
+        if (seen.has(t)) continue; seen.add(t);
+        merged.push({ tag: t, name: r.clan_name ?? "", recent: false });
+      }
+      for (const r of (recentRows ?? []) as any[]) {
+        const t = String(r.clan_tag).toUpperCase();
+        if (seen.has(t)) continue; seen.add(t);
+        merged.push({ tag: t, name: r.clan_name ?? "", recent: true });
+      }
       const filtered = q
-        ? list.filter((r) => (r.clan_name ?? "").toLowerCase().includes(q) || (r.clan_tag ?? "").toLowerCase().replace(/^#/, "").includes(q))
-        : list;
+        ? merged.filter((r) => (r.name ?? "").toLowerCase().includes(q) || r.tag.toLowerCase().replace(/^#/, "").includes(q))
+        : merged;
       const choices = filtered.slice(0, 25).map((r) => {
-        const tag = String(r.clan_tag).startsWith("#") ? r.clan_tag : `#${r.clan_tag}`;
-        const name = (r.clan_name ?? "").trim() || tag;
-        return { name: `${name} (${tag})`.slice(0, 100), value: tag };
+        const tag = r.tag.startsWith("#") ? r.tag : `#${r.tag}`;
+        const namePart = (r.name ?? "").trim() || tag;
+        const prefix = r.recent ? "🕘 " : "";
+        return { name: `${prefix}${namePart} (${tag})`.slice(0, 100), value: tag };
       });
       return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices } }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
@@ -2335,6 +2402,13 @@ Deno.serve(async (req) => {
         case "compo": return await handleCocCmd(interaction, buildCompo);
         case "player_activity": return await handleCocCmd(interaction, buildPlayerActivity);
         case "player_joins": return await handleCocCmd(interaction, buildPlayerJoins);
+        case "war": return await handleCocCmd(interaction, buildCurrentWar);
+        case "warlog": return await handleCocCmd(interaction, buildWarLog);
+        case "remaining": return await handleCocCmd(interaction, buildRemaining);
+        case "lineup": return await handleCocCmd(interaction, buildLineup);
+        case "cwl_round": return await handleCocCmd(interaction, buildCwlRound);
+        case "current_cwl_war": return await handleCocCmd(interaction, buildCurrentCwlWar);
+        case "caller": return await handleCaller(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
