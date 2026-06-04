@@ -2006,19 +2006,39 @@ Deno.serve(async (req) => {
       if (!COC_AUTOCOMPLETE_CMDS.has(cmdName)) {
         return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
       }
-      const { data: rows } = await sb.from("family_clans")
-        .select("clan_tag,clan_name,category_id,position")
-        .eq("guild_id", guildId)
-        .order("position")
-        .limit(200);
-      const list = (rows ?? []) as any[];
+      const [{ data: famRows }, { data: recentRows }] = await Promise.all([
+        sb.from("family_clans")
+          .select("clan_tag,clan_name,category_id,position")
+          .eq("guild_id", guildId)
+          .order("position")
+          .limit(200),
+        sb.from("recent_clan_tags")
+          .select("clan_tag,clan_name,last_used_at")
+          .eq("guild_id", guildId)
+          .gte("last_used_at", new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())
+          .order("last_used_at", { ascending: false })
+          .limit(25),
+      ]);
+      const seen = new Set<string>();
+      const merged: Array<{ tag: string; name: string; recent: boolean }> = [];
+      for (const r of (famRows ?? []) as any[]) {
+        const t = String(r.clan_tag).toUpperCase();
+        if (seen.has(t)) continue; seen.add(t);
+        merged.push({ tag: t, name: r.clan_name ?? "", recent: false });
+      }
+      for (const r of (recentRows ?? []) as any[]) {
+        const t = String(r.clan_tag).toUpperCase();
+        if (seen.has(t)) continue; seen.add(t);
+        merged.push({ tag: t, name: r.clan_name ?? "", recent: true });
+      }
       const filtered = q
-        ? list.filter((r) => (r.clan_name ?? "").toLowerCase().includes(q) || (r.clan_tag ?? "").toLowerCase().replace(/^#/, "").includes(q))
-        : list;
+        ? merged.filter((r) => (r.name ?? "").toLowerCase().includes(q) || r.tag.toLowerCase().replace(/^#/, "").includes(q))
+        : merged;
       const choices = filtered.slice(0, 25).map((r) => {
-        const tag = String(r.clan_tag).startsWith("#") ? r.clan_tag : `#${r.clan_tag}`;
-        const name = (r.clan_name ?? "").trim() || tag;
-        return { name: `${name} (${tag})`.slice(0, 100), value: tag };
+        const tag = r.tag.startsWith("#") ? r.tag : `#${r.tag}`;
+        const namePart = (r.name ?? "").trim() || tag;
+        const prefix = r.recent ? "🕘 " : "";
+        return { name: `${prefix}${namePart} (${tag})`.slice(0, 100), value: tag };
       });
       return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices } }), { headers: { "Content-Type": "application/json" } });
     } catch (e) {
