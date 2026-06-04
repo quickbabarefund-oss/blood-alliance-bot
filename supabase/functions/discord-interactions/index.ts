@@ -2402,6 +2402,13 @@ Deno.serve(async (req) => {
         case "compo": return await handleCocCmd(interaction, buildCompo);
         case "player_activity": return await handleCocCmd(interaction, buildPlayerActivity);
         case "player_joins": return await handleCocCmd(interaction, buildPlayerJoins);
+        case "war": return await handleCocCmd(interaction, buildCurrentWar);
+        case "warlog": return await handleCocCmd(interaction, buildWarLog);
+        case "remaining": return await handleCocCmd(interaction, buildRemaining);
+        case "lineup": return await handleCocCmd(interaction, buildLineup);
+        case "cwl_round": return await handleCocCmd(interaction, buildCwlRound);
+        case "current_cwl_war": return await handleCocCmd(interaction, buildCurrentCwlWar);
+        case "caller": return await handleCaller(interaction);
         default: return reply(`Unknown command: ${name}`);
       }
     } catch (e) {
