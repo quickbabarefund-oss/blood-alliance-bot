@@ -1966,7 +1966,12 @@ Deno.serve(async (req) => {
   if (interaction.type === APPLICATION_COMMAND_AUTOCOMPLETE) {
     try {
       const cmdName = interaction.data?.name ?? "";
-      const focused = (interaction.data?.options ?? []).find((o: any) => o.focused);
+      // Drill into subcommand options so /caller assign exposes its `tag` opt.
+      let optList: any[] = interaction.data?.options ?? [];
+      while (optList.length && optList[0]?.type === 1 /* SUB */ && optList[0].options) {
+        optList = optList[0].options;
+      }
+      const focused = optList.find((o: any) => o.focused);
       if (!focused || focused.name !== "tag") {
         return new Response(JSON.stringify({ type: RESP_AUTOCOMPLETE, data: { choices: [] } }), { headers: { "Content-Type": "application/json" } });
       }
