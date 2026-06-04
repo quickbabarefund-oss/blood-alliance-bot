@@ -1633,9 +1633,43 @@ async function handleCocCmd(
       }
       const data = await builder(guildId, { tag, targetUser, caller });
       await followUpPayload(appId, token, { ...data, flags: 0 });
+      // Remember manually-typed clan tags so they show up in autocomplete next time.
+      if (tag && guildId) runAfterResponse(rememberClanTag(guildId, tag));
     } catch (e) {
       console.error("coc cmd failed", e);
-      await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true);
+      try { await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true); } catch (_) {}
+    }
+  })());
+  return deferred(false);
+}
+
+// /caller assign | /caller clear
+async function handleCaller(interaction: any): Promise<Response> {
+  const guildId = interaction.guild_id ?? "";
+  const appId = interaction.application_id;
+  const token = interaction.token;
+  const { sub, options } = getSubOptions(interaction.data?.options);
+  const tag = getOpt(options, "tag");
+  const targetUser = getOpt(options, "user");
+  const caller = callerUserId(interaction);
+  const playerTag = String(getOpt(options, "player") ?? "");
+
+  runAfterResponse((async () => {
+    try {
+      let data: any;
+      if (sub === "assign") {
+        const position = Number(getOpt(options, "position") ?? 0);
+        data = await callerAssign(guildId, { tag, targetUser, caller, playerTag, position });
+      } else if (sub === "clear") {
+        data = await callerClear(guildId, { tag, targetUser, caller, playerTag });
+      } else {
+        data = { content: `Unknown subcommand: ${sub}`, flags: 64 };
+      }
+      await followUpPayload(appId, token, { allowed_mentions: { parse: [] }, ...data });
+      if (tag && guildId) runAfterResponse(rememberClanTag(guildId, tag));
+    } catch (e) {
+      console.error("/caller failed", e);
+      try { await followUp(appId, token, `❌ ${e instanceof Error ? e.message : String(e)}`, true); } catch (_) {}
     }
   })());
   return deferred(false);
