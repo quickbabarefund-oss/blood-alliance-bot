@@ -109,6 +109,58 @@ async function followUpPayload(applicationId: string, token: string, payload: an
   if (!res.ok) console.error("followUpPayload failed", res.status, await res.text().catch(() => ""));
 }
 
+// Compute the size Discord uses to enforce its 6000-char-per-message cap on embeds.
+function embedSize(e: any): number {
+  let n = 0;
+  if (typeof e?.title === "string") n += e.title.length;
+  if (typeof e?.description === "string") n += e.description.length;
+  if (typeof e?.footer?.text === "string") n += e.footer.text.length;
+  if (typeof e?.author?.name === "string") n += e.author.name.length;
+  for (const f of (e?.fields ?? [])) {
+    if (typeof f?.name === "string") n += f.name.length;
+    if (typeof f?.value === "string") n += f.value.length;
+  }
+  return n;
+}
+
+// Split embeds into chunks honoring Discord's caps: max 10 embeds + max 6000 chars per message.
+function chunkEmbeds(embeds: any[]): any[][] {
+  const chunks: any[][] = [];
+  let cur: any[] = [];
+  let curSize = 0;
+  for (const e of embeds) {
+    const s = embedSize(e);
+    if (cur.length >= 10 || curSize + s > 5800) {
+      if (cur.length) chunks.push(cur);
+      cur = [];
+      curSize = 0;
+    }
+    cur.push(e);
+    curSize += s;
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
+}
+
+// Send a builder payload, splitting embeds across multiple follow-ups if needed.
+async function sendBuilderPayload(applicationId: string, token: string, data: any, defaultFlags = 0) {
+  const embeds: any[] = Array.isArray(data?.embeds) ? data.embeds : [];
+  if (embeds.length <= 1) {
+    await followUpPayload(applicationId, token, { ...data, flags: data?.flags ?? defaultFlags });
+    return;
+  }
+  const chunks = chunkEmbeds(embeds);
+  for (let i = 0; i < chunks.length; i++) {
+    const isFirst = i === 0;
+    const payload: any = { embeds: chunks[i], flags: data?.flags ?? defaultFlags };
+    if (isFirst) {
+      if (data?.content) payload.content = data.content;
+      if (data?.components) payload.components = data.components;
+    }
+    await followUpPayload(applicationId, token, payload);
+  }
+}
+
 function getOpt(opts: any[] | undefined, name: string): any { return opts?.find((o) => o.name === name)?.value; }
 function getSubOptions(opts: any[] | undefined): { sub: string; options: any[] } {
   const sub = opts?.[0]; return { sub: sub?.name ?? "", options: sub?.options ?? [] };
@@ -1632,7 +1684,7 @@ async function handleCocCmd(
         }
       }
       const data = await builder(guildId, { tag, targetUser, caller });
-      await followUpPayload(appId, token, { ...data, flags: 0 });
+      await sendBuilderPayload(appId, token, data, 0);
       // Remember manually-typed clan tags so they show up in autocomplete next time.
       if (tag && guildId) runAfterResponse(rememberClanTag(guildId, tag));
     } catch (e) {

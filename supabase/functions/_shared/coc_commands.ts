@@ -816,12 +816,9 @@ export async function fetchCwlGroupCached(tag: string): Promise<any> {
   throw lastErr ?? new Error("cwl_group failed");
 }
 
-// postCoc with an AbortController timeout. Falls back to plain postCoc on success.
+// Real AbortController-based timeout (delegates to postCoc with timeoutMs).
 export async function postCocWithTimeout<T = any>(body: Record<string, any>, ms: number): Promise<T> {
-  return await Promise.race([
-    postCoc<T>(body),
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`CoC timeout (${ms}ms) for ${body.action}`)), ms)),
-  ]);
+  return await postCoc<T>(body, ms);
 }
 
 // ---------- /caller assign|clear ----------

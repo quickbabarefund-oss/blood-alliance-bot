@@ -68,14 +68,24 @@ export async function fetchPlayer(tag: string): Promise<any> {
 
 // Generic POST to the CoC proxy with a custom JSON body (for link/unlink/get/etc.).
 // Returns the unwrapped payload (data field if present) or throws on error.
-export async function postCoc<T = any>(body: Record<string, any>): Promise<T> {
+export async function postCoc<T = any>(body: Record<string, any>, timeoutMs = 15_000): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
   };
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
   console.log("CoC POST (generic)", BASE, JSON.stringify(body));
-  const res = await fetch(BASE, { method: "POST", headers, body: JSON.stringify(body) });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(BASE, { method: "POST", headers, body: JSON.stringify(body), signal: ctrl.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if ((e as any)?.name === "AbortError") throw new Error(`CoC timeout (${timeoutMs}ms) for ${body.action}`);
+    throw e;
+  }
+  clearTimeout(timer);
   const text = await res.text();
   let json: any = null;
   try { json = text ? JSON.parse(text) : null; } catch {
