@@ -579,14 +579,14 @@ export const COMMANDS: any[] = [
     description: "Assign or clear target bases for the current war",
     options: [
       { type: SUB, name: "assign", description: "Set a target for a player in the current war", options: [
-        { type: STRING,  name: "tag",      description: "Clan tag — type to search Family/recent clans", autocomplete: true },
         { type: STRING,  name: "player",   description: "Attacker player tag (e.g. #ABC123)", required: true },
         { type: INTEGER, name: "position", description: "Opponent map position (1..teamSize)", required: true },
+        { type: STRING,  name: "tag",      description: "Clan tag — type to search Family/recent clans", autocomplete: true },
         { type: USER,    name: "user",     description: "Discord user (uses their linked clan tag)" },
       ]},
       { type: SUB, name: "clear", description: "Clear a player's target in the current war", options: [
-        { type: STRING, name: "tag",    description: "Clan tag — type to search Family/recent clans", autocomplete: true },
         { type: STRING, name: "player", description: "Attacker player tag (e.g. #ABC123)", required: true },
+        { type: STRING, name: "tag",    description: "Clan tag — type to search Family/recent clans", autocomplete: true },
         { type: USER,   name: "user",   description: "Discord user (uses their linked clan tag)" },
       ]},
     ],
