@@ -1684,7 +1684,7 @@ async function handleCocCmd(
         }
       }
       const data = await builder(guildId, { tag, targetUser, caller });
-      await followUpPayload(appId, token, { ...data, flags: 0 });
+      await sendBuilderPayload(appId, token, data, 0);
       // Remember manually-typed clan tags so they show up in autocomplete next time.
       if (tag && guildId) runAfterResponse(rememberClanTag(guildId, tag));
     } catch (e) {
